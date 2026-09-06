@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
   "feedparser>=6.0,<7",
-  "requests>=2.31,<3",
+  "requests>=2.34.2,<3",
 ]
 
 [project.urls]
