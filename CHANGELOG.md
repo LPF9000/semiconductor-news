@@ -3,6 +3,18 @@
 Notable changes to this project. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+- Add immutable daily CLI editions, editorial ratings, comparable multi-day
+  benchmarks and experiment history with quality/count gates and supply alerts.
+- Normalize article identity, rotate previously sent reading, expose configurable
+  section limits, and report capped/unparseable search responses.
+
+- Add contextual category filters, weighted research/sales ranking, recent-reading minimums,
+  candidate snapshots, date replay/search, CLI article links, and selection reports.
+- Add date and preview inputs to reusable and scaffolded workflows; prevent email when
+  required categories are empty and persist the seen cache only after successful sending.
+
 ## [1.0.0]
 
 First stable release. Renamed from `tech-news-digest` to Sundry —

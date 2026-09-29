@@ -20,6 +20,9 @@
 
 # Title used in the email/archive header and email subject line.
 digest_name = "Semiconductor & DV Digest"
+lookback_days = 30
+max_items_per_section = 10
+exclude_keywords = ["insurance", "identity verification", "age verification", "University of Vermont", "UVM Medical"]
 
 # --- Hacker News (Algolia public API, no key needed) -----------------------
 
@@ -83,6 +86,10 @@ name = "IACR Cryptology ePrint Archive"
 url = "https://eprint.iacr.org/rss/rss.xml"
 default_category = "crypto_security"
 
+[[rss_sources]]
+name = "Verification Horizons"
+url = "https://blogs.sw.siemens.com/verificationhorizons/feed/"
+
 # --- arXiv (public API, no key needed) -----------------------------------
 
 [[arxiv_sources]]
@@ -96,18 +103,38 @@ query = 'cat:cs.CR AND (abs:hardware OR abs:chip OR abs:SoC OR abs:"side-channel
 max_results = 25
 
 # --- Categories, in display order ----------------------------------------
-# `keywords` are matched case-insensitively as substrings against each
-# item's title + summary. Title matches count double. Highest score wins;
-# ties/no-match fall through to `general`.
+[ranking]
+preferred_keywords = ["open access", "open source", "open-source", "research", "tutorial", "benchmark", "methodology"]
+demoted_keywords = ["request a demo", "contact sales", "buy now", "sponsored", "press release", "announces", "launches", "register now"]
+source_weights = { "arXiv Design Verification Research" = 8, "arXiv Formal Hardware Methods" = 8, "arXiv cs.AR (Hardware Architecture)" = 5, "arXiv cs.CR (hardware-related Crypto & Security)" = 5, "Chips and Cheese" = 4, "Verification Horizons" = 2 }
+
+[[arxiv_sources]]
+name = "arXiv Design Verification Research"
+query = '(all:"hardware verification" OR all:"design verification" OR all:"SystemVerilog" OR all:"testbench" OR all:"RTL verification" OR all:"cocotb")'
+max_results = 100
+
+[[arxiv_sources]]
+name = "arXiv Formal Hardware Methods"
+query = '(cat:cs.LO OR cat:cs.SE OR cat:cs.AR) AND (all:"model checking" OR all:"equivalence checking" OR all:"hardware fuzzing" OR all:"hardware verification") AND (all:hardware OR all:RTL OR all:Verilog OR all:circuits)'
+max_results = 100
+
+# Keywords match whole terms in full titles/summaries. Title matches count
+# double; contextual gates and weights refine eligibility. Ties use category
+# order, and unmatched items go to general.
 
 [[categories]]
 key = "dv_uvm"
+min_items = 5
+min_score = 3
+required_keywords = ["uvm", "systemverilog", "verilog", "rtl", "asic", "fpga", "soc", "semiconductor", "silicon", "chip", "chips", "cocotb", "pyuvm", "dvcon", "eda", "hardware verification", "hardware design verification", "hardware formal verification", "formal verification of hardware", "hardware fuzzing", "SystemC-AMS"]
+exclude_keywords = ["insurance", "identity verification", "age verification", "news coverage", "code coverage for Python", "UVM Medical", "University of Vermont"]
+keyword_weights = { "uvm" = 5, "testbench" = 4, "cocotb" = 5, "pyuvm" = 5, "functional coverage" = 4, "coverage closure" = 4, "hardware verification" = 5, "design verification" = 5, "formal verification" = 4, "SystemVerilog assertions" = 5, "hardware fuzzing" = 5, "equivalence checking" = 5, "information-flow verification" = 5, "property directed reachability" = 5, "RTL verification" = 5 }
 title = "Design Verification, UVM & Formal"
 blurb = """\
 Testbenches, coverage, assertions, formal methods, and everything that \
 keeps silicon honest before tapeout.\
 """
-max_items = 8
+max_items = 10
 keywords = [
   "uvm",
   "verification",
@@ -115,6 +142,7 @@ keywords = [
   "formal verification",
   "coverage",
   "assertion",
+  "assertions",
   "systemverilog assertions",
   " sva ",
   "constrained random",
@@ -238,7 +266,8 @@ hardware trojans — the security layer beneath the SoC.\
 """
 max_items = 8
 keywords = [
-  "cryptograph",
+  "cryptography",
+  "cryptographic",
   " crypto ",
   "side-channel",
   "side channel",

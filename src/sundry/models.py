@@ -29,7 +29,12 @@ class Category:
     title: str
     blurb: str
     keywords: tuple[str, ...] = field(default_factory=tuple)
-    max_items: int = 8
+    max_items: int = 10
+    required_keywords: tuple[str, ...] = ()
+    exclude_keywords: tuple[str, ...] = ()
+    keyword_weights: dict[str, float] = field(default_factory=dict)
+    min_score: float = 1
+    min_items: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +67,11 @@ class DigestConfig:
     """Title used in the email/archive header and email subject. Set via a
     top-level `digest_name = "..."` key in feeds.toml — this is what makes
     the tool's output read as *your* topic rather than the default."""
+    lookback_days: int = 30
+    preferred_keywords: tuple[str, ...] = ()
+    demoted_keywords: tuple[str, ...] = ()
+    source_weights: dict[str, float] = field(default_factory=dict)
+    exclude_keywords: tuple[str, ...] = ()
 
     def category_by_key(self) -> dict[str, Category]:
         return {category.key: category for category in self.categories}

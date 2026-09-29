@@ -22,6 +22,19 @@ substantive digest on every PR — this repo still has no scheduled
 workflow of its own and ships no default topic; only
 semiconductor-news-digest actually runs on a cron.
 
+## Code Review Rules
+
+- Historical preview and frozen replay must not send email or mutate production
+  archives/cache unless explicitly requested; CI's explicitly authorized PR
+  preview may email without writing production state. Frozen capture must reproduce its
+  original ordered links, not silently rerank them under a changed configuration.
+- Editorial comparisons must use identical candidates and content-specific
+  reviews. Missing reviews, diminished useful volume, or lower relevance must
+  fail the gate; repeated reading must not be presented as freshly published news.
+- Topic matching must consider full article text with term boundaries and context.
+  Reject unrelated meanings of coverage/verification; preserve configurable
+  research preference and penalize sales without inventing topic policy in the engine.
+
 ## The most common task: set this up for a new topic
 
 If a user asks you to "make a daily digest about X using this," **do not
@@ -160,18 +173,24 @@ key = "unique_snake_case_key"
 title = "Human-readable Category Title"
 blurb = "One or two sentences shown under the title, explaining what this category covers and why it matters."
 max_items = 8  # cap on how many items this category shows per run
+min_items = 0  # optional recent-reading target; --require-minimums enforces it
+min_score = 1
+required_keywords = []  # optional: at least one must match full title/summary
+exclude_keywords = []  # optional: block this category assignment
+keyword_weights = { "keyword one" = 3 }
 keywords = [
   "keyword one",
   "keyword two",
-  # matched case-insensitively as a substring of title+summary;
-  # a title match scores double a summary-only match. Pad short/ambiguous
-  # terms with spaces, e.g. " ai " not "ai", to avoid matching inside
-  # unrelated words.
+  # Whole-term case-insensitive matching of full title+summary.
+  # Title matches score double; list plural/variant spellings explicitly.
 ]
 ```
 
 See step 3 above for how to validate a new config without cloning
 anything.
+
+See README.md's search/date and tuning sections for global exclusions,
+research/sales source weights, CLI links, and offline candidate replay.
 
 ## Conventions to respect in this repo
 

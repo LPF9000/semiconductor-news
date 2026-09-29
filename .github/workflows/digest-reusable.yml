@@ -23,6 +23,14 @@ name: Reusable Digest Builder
 on:
   workflow_call:
     inputs:
+      date:
+        description: "UTC date to replay/search (YYYY-MM-DD); blank for today's scheduled run"
+        type: string
+        default: ""
+      send-email:
+        description: "Send email; false builds a downloadable preview only"
+        type: boolean
+        default: true
       config-path:
         description: "Path, in the calling repo, to the feeds.toml config."
         type: string
@@ -100,21 +108,40 @@ jobs:
         # to a value, --send-email fails this step with a clear reason;
         # nothing here needs to check for that separately.
         env:
+          DIGEST_DATE: ${{ inputs.date }}
+          SEND_EMAIL: ${{ inputs.send-email }}
+          DIGEST_REF: ${{ inputs.digest-ref }}
+          CONFIG_PATH: ${{ inputs.config-path }}
+          MAIL_SERVER: ${{ inputs.mail-server }}
+          MAIL_PORT: ${{ inputs.mail-port }}
+          MAIL_FROM_NAME: ${{ inputs.mail-from-name }}
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           DIGEST_RECIPIENT: ${{ inputs.recipient || secrets.DIGEST_RECIPIENT }}
         run: |
-          uvx --from "git+https://github.com/LPF9000/sundry.git@${{ inputs.digest-ref }}" \
-            sundry --config "${{ inputs.config-path }}" \
-            --send-email \
-            --mail-server "${{ inputs.mail-server }}" \
-            --mail-port "${{ inputs.mail-port }}" \
-            --mail-from-name "${{ inputs.mail-from-name }}"
+          args=(--require-minimums --report-output digest_output/report.json --links-output digest_output/links.txt)
+          if [ -n "$DIGEST_DATE" ]; then args+=(--date "$DIGEST_DATE"); fi
+          if [ "$SEND_EMAIL" = true ]; then
+            args+=(--send-email)
+          else
+            args+=(--no-write-cache --no-archive)
+          fi
+          uvx --from "git+https://github.com/LPF9000/sundry.git@$DIGEST_REF" \
+            sundry --config "$CONFIG_PATH" "${args[@]}" \
+            --mail-server "$MAIL_SERVER" --mail-port "$MAIL_PORT" --mail-from-name "$MAIL_FROM_NAME"
+
+      - name: Upload preview and selection report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-preview
+          path: digest_output/
 
       - name: Commit archive & dedupe cache
+        if: inputs.send-email && inputs.date == ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add digests state/seen.json
+          git add digests state
           git diff --cached --quiet || git commit -m "Daily digest $(date -u +%Y-%m-%d)"
           git push

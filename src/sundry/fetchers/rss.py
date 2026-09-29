@@ -8,7 +8,7 @@ import feedparser
 import requests
 
 from ..models import Article, RssSource
-from ..text import strip_html, truncate
+from ..text import strip_html
 from .common import FetchOutcome, entry_datetime, request_with_retries
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def fetch_rss(source: RssSource, session: requests.Session) -> FetchOutcome:
             Article(
                 title=strip_html(title),
                 link=link,
-                summary=truncate(summary),
+                summary=summary,
                 source=source.name,
                 published=entry_datetime(entry),
                 forced_category=source.default_category,

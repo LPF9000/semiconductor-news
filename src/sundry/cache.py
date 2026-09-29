@@ -7,6 +7,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from .identity import canonical_url
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TTL_DAYS = 45
@@ -33,10 +35,25 @@ class SeenCache:
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Could not read seen-cache %s (%s); starting empty.", self._path, exc)
             return {}
-        return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            return {}
+        result = {url: value for url, value in data.items() if isinstance(url, str) and isinstance(value, str)}
+        for url, value in list(result.items()):
+            key = canonical_url(url)
+            result[key] = max(result.get(key, value), value)
+        return result
 
     def __contains__(self, url: str) -> bool:
-        return url in self._seen
+        return url in self._seen or canonical_url(url) in self._seen
+
+    def last_seen(self, url: str) -> datetime:
+        """UTC timestamp used to rotate recent reading instead of repeating the same top item."""
+        value = self._seen.get(canonical_url(url), self._seen.get(url))
+        try:
+            timestamp = datetime.fromisoformat(value) if value else datetime.min.replace(tzinfo=UTC)
+            return timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp.astimezone(UTC)
+        except ValueError:
+            return datetime.min.replace(tzinfo=UTC)
 
     def add(self, url: str, when: datetime | None = None) -> None:
         self._seen[url] = (when or datetime.now(UTC)).isoformat()

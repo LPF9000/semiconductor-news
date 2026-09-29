@@ -137,7 +137,16 @@ on:
     # UTC, standard 5-field cron: e.g. "0 8 * * *" for 08:00 UTC,
     # "0 */6 * * *" for every 6 hours, "0 12 * * 1-5" for weekdays only.
     - cron: "0 12 * * *"
-  workflow_dispatch: {{}}
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "UTC date to test or email (YYYY-MM-DD); blank for today"
+        type: string
+        default: ""
+      send-email:
+        description: "Send email (disable for a downloadable preview)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -146,6 +155,8 @@ jobs:
   digest:
     uses: LPF9000/sundry/.github/workflows/digest-reusable.yml@{ref}
     with:
+      date: ${{{{ inputs.date || '' }}}}
+      send-email: ${{{{ github.event_name == 'schedule' || inputs.send-email }}}}
       # A repository VARIABLE is recommended (Settings > Secrets and
       # variables > Actions > Variables tab) — an email address isn't
       # sensitive, and variables show their value in the Settings UI so
@@ -307,13 +318,16 @@ key = "unique_snake_case_key"
 title = "Human-readable Category Title"
 blurb = "One or two sentences shown under the title, explaining what this category covers and why it matters."
 max_items = 8  # cap on how many items this category shows per run
+min_items = 0  # optional recent-reading target; --require-minimums enforces it
+min_score = 1
+required_keywords = []  # optional: at least one must match full title/summary
+exclude_keywords = []  # optional: block this category assignment
+keyword_weights = {{ "keyword one" = 3 }}
 keywords = [
   "keyword one",
   "keyword two",
-  # matched case-insensitively as a substring of title+summary;
-  # a title match scores double a summary-only match. Pad short/ambiguous
-  # terms with spaces, e.g. " ai " not "ai", to avoid matching inside
-  # unrelated words.
+  # Whole-term case-insensitive matching of full title+summary.
+  # Title matches score double; list plural/variant spellings explicitly.
 ]
 ```
 

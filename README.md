@@ -170,8 +170,9 @@ runtime beyond that — the whole tool is one workflow, triggered daily.
    searches — concurrently, so one slow source doesn't hold up the rest.
 2. Drops anything already sent in the last ~45 days, tracked in
    `state/seen.json`.
-3. Buckets what's left into topic categories by keyword match (see
-   `config/feeds.toml`), capping each category to its configured size.
+3. Applies contextual category rules, ranks by relevance and configured
+   research/sales signals, and caps each category. A category minimum can
+   use labeled recent reading when new items are exhausted.
 4. Renders an HTML email and a Markdown archive page, and sends the
    email itself over SMTP (`smtplib`, standard library — no third-party
    mail action to trust or keep in sync). GitHub Actions' own part is
@@ -205,25 +206,122 @@ meant to be consumed (see
 [GitHub's own reusable-workflows docs](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)),
 not a fork-and-diverge template.
 
+## Search, article links, and date testing
+
+For repeatable editorial work, use `sundry lab`. It freezes both the candidates
+and the original ordered links; running `capture` again on the same date reads
+that edition offline. `show` preserves the original, while `rerank` experiments
+with the current config. This prevents a ranking change or a changing feed
+from silently changing yesterday's edition.
+
+From your topic repository, using its installed `sundry` command (or the sibling
+checkout's `../sundry/.venv/bin/sundry`):
+
+```bash
+sundry lab capture --date 2026-09-29 --category dv_uvm
+sundry lab show --date 2026-09-29 --category dv_uvm
+sundry lab rerank --date 2026-09-29 --category dv_uvm
+
+# Rate the exact content, with an editorial rationale. Use --id instead of
+# --url/--date when the candidate pool contains several content versions.
+sundry lab rate --date 2026-09-29 --category dv_uvm \
+  --url https://example.com/article --grade 3 --kind research \
+  --notes "Direct coverage-closure methodology with reusable checking artifacts"
+
+sundry lab benchmark --category dv_uvm --output evaluation/comparison.json
+sundry lab history --category dv_uvm
+```
+
+The default store is `evaluation/`; override it before the subcommand with
+`sundry lab --store-dir evaluation-expanded ...`. A separate store lets a
+source-expansion experiment capture new inputs without overwriting the original
+edition. An edition captured early today retains its recorded cutoff, even if
+more articles arrive tonight. Each capture saves input/config hashes and
+warnings; subsequent replay checks their integrity and never fetches.
+
+Ratings are 0 unrelated, 1 marginal, 2 useful, 3 excellent for the category.
+They describe editorial usefulness, not proof that a paper's scientific claims
+are correct. Changed titles/abstracts require fresh review; source aliases and
+tracking parameters do not create new articles. Reviews append to a ledger,
+and the latest review of that content/category is used.
+
+The benchmark compares the frozen edition with the current config on identical
+candidates. `--baseline-config path/to/feeds.toml` instead compares two configs
+on the same captured inputs, and `--ratings path/to/ratings.json` shares a review
+ledger between experiments. `--dates YYYY-MM-DD ...` selects a fixed cohort.
+Unreviewed selections cannot pass. Every tested date must preserve or improve
+unique article count, useful count, useful precision, and mean grade; it must
+also meet configured minimums, 90% useful precision, and mean grade 2.5/3.
+
+Reports include graded ranking quality (NDCG), recall within the labeled pool,
+research/sales counts, publishers, recently repeated links, publication-day
+counts and capacity gaps. Unknown ratings are not treated as good or bad. Supply
+alerts flag missing capacity and repeated reading separately from relevance
+regressions. Several arXiv queries count as one publisher. Saved experiments
+include corpus, ratings, config and engine hashes; compare trends only when the
+cohort and rating ledger match. Reserve future unseen articles as holdout data
+before making claims about generalization.
+
+`max_items_per_section` defaults to 10 in config, with optional category
+`max_items` overrides. The normal CLI's `--max-items-per-section N` overrides all
+sections for a run, provided N still meets the configured minimums. Collection
+limits and source failures appear as warnings so insufficient supply prompts
+source repair/expansion rather than lowering the relevance threshold.
+
+From a Sundry checkout with its own environment installed:
+
+```bash
+# Fetch once, print article links, and retain candidates for fast comparisons.
+.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+  --links --links-output /tmp/links.txt --candidates-output /tmp/candidates.json \
+  --report-output /tmp/report.json --html-output /tmp/preview.html
+
+# Change weights in the config, then repeat offline using identical candidates.
+.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+  --candidates-input /tmp/candidates.json --links \
+  --report-output /tmp/report.json --html-output /tmp/preview.html
+```
+
+`--date YYYY-MM-DD` searches the configured `lookback_days` ending at the
+end of that UTC day. It ignores the seen cache and never writes the production
+cache or Markdown archive. If `state/candidates/YYYY-MM-DD.json` exists, it
+reuses those candidates offline; otherwise arXiv and Hacker News receive date
+constraints. Current RSS feeds only retain a limited history, so historical
+searches without a saved snapshot report that limitation. Search APIs return
+current versions of papers, rather than the exact text available in the past.
+
+`--links` prints category, title, and URL to stdout; logs go to stderr.
+`--links-output` saves that same list. `--report-output` records matching terms,
+quality signals, scores, and selection/rejection decisions. `--candidates-output`
+saves the full fetched input even during a preview, and `--candidates-input`
+loads it without network calls. Add `--send-email` to send a chosen date using
+the existing mail credentials and recipient. Add `--require-minimums` to fail
+before email if a required category cannot be filled.
+
+Without `--date`, use `--no-write-cache --no-archive` for a preview. Scheduled
+runs save raw candidate snapshots in `state/candidates/` and retain recent
+candidates that roll out of RSS. Previously sent fallback items are labeled;
+the tool never invents fresh news to satisfy a minimum.
+
+The scaffolded workflow exposes `date` and `send-email` inputs. Disable
+`send-email` for a preview; download the `digest-preview` artifact for HTML,
+article links, and the ranking report. Scheduled builds enforce category
+minimums. Deploy the updated reusable workflow before enabling its new inputs
+in a caller repository.
+
 ## Known limitations
 
 Worth knowing before you rely on this for something important — these
 are deliberate scope decisions, not bugs waiting to be filed:
 
-- **Ranking is naive, on purpose.** Which category an item lands in is
-  decided by keyword substring matching — no relevance scoring, no
-  clustering of the same story covered by two different sources, no
-  source-quality or popularity weighting. Purpose-built ranking tools
-  exist and do this well; this project deliberately isn't one of them.
-  A half-right ranking model is worse than none — it can silently bury
-  or misfile something you actually needed to see, in a way that's much
-  harder to notice than "this category is a little broad." Keyword
-  matching is dumb but legible: read `config/feeds.toml` and you know
-  exactly why anything landed where it did.
-- **Few tuning knobs beyond the config file, deliberately.** Every extra
-  dial is something to misconfigure and something to explain in a doc.
-  If a topic needs more nuance than "keyword match, capped list size,"
-  this may be too blunt a tool for it as-is.
+- **Ranking uses explicit rules.** Context gates and term/source weights
+  improve relevance, but require tuning against labeled examples. The engine
+  does not infer article meaning or verify paywall/free-access status. Prefer
+  known public research sources and demote explicit sales language in config.
+- **Daily fresh news cannot be guaranteed.** Minimums can use relevant recent
+  reading; if the pool is empty, strict builds fail and expose a shortfall.
+- **Historical RSS is incomplete without snapshots.** arXiv/HN searches use
+  dates, but current RSS feeds cannot reconstruct arbitrary past editions.
 - **Dedupe is exact-URL only.** The same story from two different feeds,
   worded differently, shows up twice — a real near-duplicate clustering
   step would catch that; this doesn't attempt it.
@@ -240,11 +338,8 @@ are deliberate scope decisions, not bugs waiting to be filed:
   tab (not a failed run — no run), that's the signature. See
   [Troubleshooting](#troubleshooting).
 
-None of this is unfixable — it's what's out of scope for now to keep
-the tool's behavior simple and easy to reason about, rather than risk
-quietly degrading digest quality by getting a scoring pass wrong. See
-[CONTRIBUTING.md](./CONTRIBUTING.md) if better ranking is something
-you'd want to help build.
+See [the relevance improvement plan](./RELEVANCE_PLAN.md) for evaluation
+criteria and follow-up work.
 
 ## For AI agents
 
@@ -404,7 +499,10 @@ Every pull request runs `.github/workflows/ci.yml`:
    init` scaffolds into every topic repo; see
    [Continuous integration for your topic repo](#continuous-integration-for-your-topic-repo).
 3. **Lint & test** — `ruff check`, `ruff format --check`, `mypy`, and the
-   `pytest` suite, on Python 3.11 and 3.12.
+   `pytest` suite, on Python 3.11 and 3.12. Coverage must stay at least
+   80%; XML reports are uploaded for both versions. The suite exercises
+   unrelated DV terms, research/sales ranking, date boundaries, frozen replay,
+   and CLI benchmark success/failure after editorial review.
 4. **Build & email a preview digest** — runs the real pipeline against
    [`examples/feeds.toml`](./examples/feeds.toml) (the real semiconductor
    config, not a stub) and live sources (no commit, no cache write) and,
@@ -412,8 +510,11 @@ Every pull request runs `.github/workflows/ci.yml`:
    digest — same content a real user's repo would send — prefixed
    `[PR Preview]` so you can confirm the whole engine still works end to
    end, the way a user would experience it, before merging. If the
-   secrets aren't set yet, this step is skipped with a warning instead of
-   failing the PR. This repo has no scheduled workflow of its own —
+   secrets aren't set yet, email is skipped with a warning instead of
+   failing the PR. HTML, article links, and decision/source diagnostics are
+   uploaded as `digest-preview` artifacts in either case. Live previews test
+   integrations, not deterministic editorial quality; the consumer repo's
+   frozen-corpus benchmarks provide that gate. This repo has no scheduled workflow of its own —
    `examples/feeds.toml` is built only here, on PRs, never on a cron.
 
 `ci.yml` installs the package via [uv](https://docs.astral.sh/uv/) from
@@ -567,6 +668,24 @@ changes needed:
   list.
 - Add, remove, or reweight a category (`title`, `blurb`, `max_items`,
   `keywords`) under `[[categories]]`.
+
+Top-level `lookback_days` (default 30) bounds the candidate age;
+`exclude_keywords` removes irrelevant topics from every category. Under each
+category, `required_keywords` requires at least one contextual term,
+`exclude_keywords` prevents that category assignment, `keyword_weights`
+overrides the default weight of 1, and `min_score` sets an eligibility threshold
+(default 1). Title hits count twice summary hits. All matching is case-insensitive
+and uses whole terms; list plurals/variants explicitly. Category `blurb` is a
+reader-facing description, not a hidden classification signal. Ties use
+configured category order; unmatched items go to `general`.
+
+`min_items` (default 0) enables previously sent recent reading up to the target,
+within `max_items`. Under `[ranking]`, `preferred_keywords` adds 3 per matched
+term, `demoted_keywords` subtracts 6 per term, and `source_weights` adds the
+weight for an exact configured source name. Rank is category score plus these
+signals, then publication time and URL as deterministic tie-breakers.
+Put all top-level keys before any table header. Research preferences and sales
+penalties affect rank only after category eligibility has been decided.
 
 Change the send time *or* how often it runs by editing the `cron` line
 in your repo's `.github/workflows/digest.yml` — it's a standard 5-field
