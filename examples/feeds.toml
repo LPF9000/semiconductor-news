@@ -90,6 +90,16 @@ default_category = "crypto_security"
 name = "Verification Horizons"
 url = "https://blogs.sw.siemens.com/verificationhorizons/feed/"
 
+# Public technical feeds verified September 30, 2026. Keep keyword/context
+# eligibility: neither feed is exclusively DV, and older articles remain dated.
+[[rss_sources]]
+name = "Antmicro Engineering"
+url = "https://antmicro.com/blog/feed.xml"
+
+[[rss_sources]]
+name = "ZipCPU"
+url = "https://zipcpu.com/feed.xml"
+
 # --- arXiv (public API, no key needed) -----------------------------------
 
 [[arxiv_sources]]

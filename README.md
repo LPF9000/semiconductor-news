@@ -24,6 +24,7 @@ has no default topic.
 - [Using this for your own topic](#using-this-for-your-own-topic)
 - [How it works](#how-it-works)
 - [Search, article links, and date testing](#search-article-links-and-date-testing)
+- [Interactive terminal](#interactive-terminal)
 - [Tuning the digest](#tuning-the-digest)
 - [Setting up email (required, one-time)](#setting-up-email-required-one-time)
 - [Known limitations](#known-limitations)
@@ -50,6 +51,16 @@ uvx --from "git+https://github.com/LPF9000/sundry.git@main" sundry init
 This writes `config/feeds.toml`, scheduled and CI workflows, and agent
 instructions. It installs Sundry in uv's cache; it does not copy the engine
 into your repository.
+
+For an interactive setup wizard in an empty topic repository, use:
+
+```bash
+uvx --from "sundry[ui] @ git+https://github.com/LPF9000/sundry.git@main" sundry setup --scaffold .
+```
+
+The wizard collects sources, categories and ranking preferences, validates a
+TOML preview, and asks you to confirm before creating files. Existing files are
+protected. See [terminal setup](./docs/terminal.md#guided-setup).
 
 ### Filling in config/feeds.toml without an AI agent
 
@@ -103,8 +114,8 @@ that edition offline. `show` preserves the original, while `rerank` experiments
 with the current config. This prevents a ranking change or a changing feed
 from silently changing yesterday's edition.
 
-From your topic repository, using its installed `sundry` command (or the sibling
-checkout's `../sundry/.venv/bin/sundry`):
+From your topic repository, using its installed `sundry` command. To use a sibling
+development checkout instead, prefix commands with `uv run --project ../sundry`:
 
 ```bash
 sundry lab capture --date 2026-09-29 --category dv_uvm
@@ -151,6 +162,13 @@ include corpus, ratings, config and engine hashes; compare trends only when the
 cohort and rating ledger match. Reserve future unseen articles as holdout data
 before making claims about generalization.
 
+`lab audit` exports source mix, publisher concentration, freshness, repetition,
+access evidence and missing content-specific reviews. `lab holdout` rejects
+canonical-story overlap with a tuning corpus. Both validate frozen inputs and
+protect them from report writes. See [the audit protocol](./docs/editorial-audit.md)
+for shared ledgers, explicit access metadata, a month of captures, and independent
+review. Access checks and title-similarity diagnostics do not alter rankings.
+
 `max_items_per_section` defaults to 10 in config, with optional category
 `max_items` overrides. The normal CLI's `--max-items-per-section N` overrides all
 sections for a run, provided N still meets the configured minimums. Collection
@@ -161,12 +179,12 @@ From a Sundry checkout with its own environment installed:
 
 ```bash
 # Fetch once, print article links, and retain candidates for fast comparisons.
-.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+uv run sundry --config examples/feeds.toml --date 2026-09-24 \
   --links --links-output /tmp/links.txt --candidates-output /tmp/candidates.json \
   --report-output /tmp/report.json --html-output /tmp/preview.html
 
 # Change weights in the config, then repeat offline using identical candidates.
-.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+uv run sundry --config examples/feeds.toml --date 2026-09-24 \
   --candidates-input /tmp/candidates.json --links \
   --report-output /tmp/report.json --html-output /tmp/preview.html
 ```
@@ -238,6 +256,24 @@ cron expression, always in UTC: `"0 8 * * *"` for once daily at 08:00
 UTC, `"0 */6 * * *"` for every 6 hours, `"0 12 * * 1-5"` for weekdays
 only, and so on. The ~45-day dedupe window works the same regardless of
 how often you run it.
+
+## Interactive terminal
+
+The optional Textual interface provides a research command workspace and a
+separate guided configuration wizard. In this checkout:
+
+```bash
+uv sync --locked --extra ui
+uv run sundry workspace --config examples/feeds.toml --store-dir /path/to/evaluation
+uv run sundry setup --output /tmp/new-topic-feeds.toml
+```
+
+The workspace has a command prompt, history, status and transcript. Enter `/help`
+for frozen links, full article inspection, reranking, auditing and the optional
+edition detail view. Capture and rating writes require confirmation. The wizard
+previews a validated config before writing and protects existing files. Neither
+mode sends mail or updates production archives/cache. See
+[terminal controls and examples](./docs/terminal.md).
 
 ## Setting up email (required, one-time)
 

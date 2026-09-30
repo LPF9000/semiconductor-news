@@ -444,11 +444,49 @@ def run_lab(argv: list[str]) -> int:
     rerank.add_argument("--plain", action="store_true")
     trend = sub.add_parser("history", help="Show recorded experiments; compare only matching corpus and rating hashes")
     trend.add_argument("--category", required=True)
+    audit_parser = sub.add_parser("audit", help="Monitor frozen editions and export a content-specific review queue")
+    audit_parser.add_argument("--category", required=True)
+    audit_parser.add_argument("--dates", type=date.fromisoformat, nargs="+")
+    audit_parser.add_argument("--ratings", type=Path, help="Shared content-specific editorial ledger")
+    audit_parser.add_argument("--access-metadata", type=Path, help="Explicit content-specific access evidence")
+    audit_parser.add_argument("--output", type=Path, required=True)
+    holdout = sub.add_parser("holdout", help="Check canonical-story separation from a tuning corpus")
+    holdout.add_argument("--training-store", type=Path, required=True)
+    holdout.add_argument("--dates", type=date.fromisoformat, nargs="+", required=True)
+    holdout.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         if args.command == "capture":
             _display_edition(capture(args.config, args.store_dir, args.date, args.candidates_input), args)
+        elif args.command in {"audit", "holdout"}:
+            from .audit import audit, holdout_manifest
+
+            report = (
+                audit(
+                    args.store_dir,
+                    args.category,
+                    args.dates,
+                    ratings_path=args.ratings,
+                    access_path=args.access_metadata,
+                )
+                if args.command == "audit"
+                else holdout_manifest(args.store_dir, args.training_store, args.dates)
+            )
+            protected = args.store_dir.resolve()
+            output = args.output.resolve()
+            inputs = [protected / "ratings.json"]
+            if args.command == "audit":
+                inputs.extend(path.resolve() for path in (args.ratings, args.access_metadata) if path)
+            folders = list(args.store_dir.glob("????-??-??/edition.json"))
+            if args.command == "holdout":
+                folders.extend(args.training_store.glob("????-??-??/edition.json"))
+                inputs.append(args.training_store.resolve() / "ratings.json")
+            if output in inputs or any(output.is_relative_to(p.parent.resolve()) for p in folders):
+                raise ValueError("Audit outputs must not replace a ledger or frozen edition")
+            _write_json(args.output, report)
+            print(json.dumps(report, indent=2))
+            return 0 if report.get("review_complete", report.get("independent", False)) else 1
         elif args.command == "show":
             _display_edition(_validated_edition(args.store_dir / args.date.isoformat()), args)
         elif args.command == "browse":

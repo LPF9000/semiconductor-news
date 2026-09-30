@@ -218,6 +218,18 @@ research/sales source weights, CLI links, and offline candidate replay.
 
 ## Dev commands (this repo's own Python package)
 
+The optional Textual interface has two separate modes: `sundry workspace` for
+interactive research/evaluation commands, and `sundry setup` for local guided
+configuration. Setup must run in a topic repository or at an explicit new output
+path, with preview and confirmation before writes. Protect existing configs and
+retain the noninteractive `init`, plain CLI and JSON paths. UI dependencies must
+remain optional. See docs/terminal.md and docs/editorial-audit.md.
+
+`lab audit` reports original frozen selections and missing reviews; `lab holdout`
+checks canonical-story separation from a tuning store. These checks do not supply
+human labels, guarantee scientific correctness, or infer access from publishers.
+Do not call an unreviewed or overlapping corpus an independent quality success.
+
 Prefer `uv run` for all local CLI and development commands in this checkout.
 It handles the project environment automatically; do not instruct users to
 activate `.venv` or default to `.venv/bin/sundry`. For a new topic repo,
@@ -228,6 +240,8 @@ uv sync --locked --extra dev     # install
 uv run sundry --help             # CLI help
 uv run sundry lab --help         # evaluation command help
 uv run sundry lab capture --help # subcommand help
+uv run sundry workspace --help   # interactive command workspace
+uv run sundry setup --help       # guided local configuration
 uv run ruff check .              # lint
 uv run ruff format .             # format
 uv run mypy src                  # type-check

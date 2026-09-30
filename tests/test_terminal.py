@@ -93,24 +93,25 @@ def test_browser_filter_date_open_and_no_writes(tmp_path, monkeypatch):
         app = EditionBrowser(store, date(2026, 1, 2), "dv")
         async with app.run_test(size=(80, 30)) as pilot:
             await pilot.pause()
-            assert app.query_one(DataTable).row_count == 1
-            app.action_open_article()
+            view = app.view
+            assert view.query_one(DataTable).row_count == 1
+            view.action_open_article()
             assert opened == ["https://example.com/a"]
-            search = app.query_one(Input)
+            search = view.query_one(Input)
             search.value = "absent"
             await pilot.pause()
-            assert not app.rows
-            app.action_open_article()
+            assert not view.rows
+            view.action_open_article()
             assert len(opened) == 1
             search.value = "uvm"  # Search full abstract, not only titles.
             await pilot.pause()
-            assert len(app.rows) == 1
-            app.query_one("#day", Select).value = "2026-01-03"
+            assert len(view.rows) == 1
+            view.query_one("#day", Select).value = "2026-01-03"
             await pilot.pause()
-            assert app.edition["date"] == "2026-01-03"
-            app.query_one("#category", Select).value = "general"
+            assert view.edition["date"] == "2026-01-03"
+            view.query_one("#category", Select).value = "general"
             await pilot.pause()
-            assert not app.rows
+            assert not view.rows
 
     asyncio.run(exercise())
     assert before == {p.relative_to(store): p.read_bytes() for p in store.rglob("*") if p.is_file()}

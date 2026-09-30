@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Select, Static
 
 from .history import load_snapshot
@@ -18,7 +19,7 @@ from .identity import content_id
 from .lab import _validated_edition, show
 
 
-class EditionBrowser(App[None]):
+class EditionScreen(Screen[None]):
     """Filter original links locally; only an explicit open action launches a browser."""
 
     TITLE = "Sundry · frozen editions"
@@ -30,7 +31,7 @@ class EditionBrowser(App[None]):
     #details { height: 10; border-top: solid $primary; padding: 0 1; }
     #status { height: auto; max-height: 5; padding: 0 1; }
     """
-    BINDINGS = [("q", "quit", "Quit"), ("o", "open_article", "Open article"), ("slash", "search", "Search")]
+    BINDINGS = [("q", "close", "Close"), ("o", "open_article", "Open article"), ("slash", "search", "Search")]
 
     def __init__(self, store: Path, day: date | None = None, category: str | None = None) -> None:
         super().__init__()
@@ -142,8 +143,31 @@ class EditionBrowser(App[None]):
         if not 0 <= index < len(self.rows):
             return
         url = self.rows[index]["url"]
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            self.notify("Invalid article URL", severity="error")
+            return
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             self.notify("Only HTTP(S) article links can be opened", severity="error")
             return
         webbrowser.open(url)
+
+    def action_close(self) -> None:
+        if isinstance(self.app, EditionBrowser):
+            self.app.exit()
+        else:
+            self.app.pop_screen()
+
+
+class EditionBrowser(App[None]):
+    """Standalone entry point for the workspace's optional edition detail view."""
+
+    TITLE = EditionScreen.TITLE
+
+    def __init__(self, store: Path, day: date | None = None, category: str | None = None) -> None:
+        super().__init__()
+        self.view = EditionScreen(store, day, category)
+
+    def on_mount(self) -> None:
+        self.push_screen(self.view)

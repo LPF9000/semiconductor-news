@@ -331,6 +331,20 @@ keywords = [
 ]
 ```
 
+## Optional interactive tools
+
+Sundry's optional Textual extra provides `sundry workspace` for local research
+and evaluation, and `sundry setup --output <new-path>` for guided configuration.
+Run setup at a new path; it refuses to overwrite an existing config. The workspace
+confirms local capture/rating writes and never sends mail or updates production
+archives/cache. Use the engine's docs/terminal.md for installation and controls.
+Plain CLI commands remain available without UI dependencies.
+
+Use `lab audit` with the shared review ledger to report source concentration,
+freshness, repetition and missing content-specific reviews. Use `lab holdout`
+to check story overlap with a training store; disjoint URLs alone do not establish
+blind human review. Preserve frozen editions and do not fabricate review labels.
+
 ## Changing the schedule
 
 Edit the `cron` line in `.github/workflows/digest.yml` — always UTC,
@@ -469,7 +483,7 @@ def parse_init_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run_init(argv: list[str] | None = None) -> int:
+def run_init(argv: list[str] | None = None, *, config_text: str | None = None) -> int:
     args = parse_init_args(argv)
 
     config_path = args.directory / "config" / "feeds.toml"
@@ -479,7 +493,11 @@ def run_init(argv: list[str] | None = None) -> int:
     claude_path = args.directory / "CLAUDE.md"
 
     if not args.force:
-        existing = [str(p) for p in (config_path, workflow_path, ci_path, agents_path, claude_path) if p.exists()]
+        existing = [
+            str(p)
+            for p in (config_path, workflow_path, ci_path, agents_path, claude_path)
+            if p.exists() or p.is_symlink()
+        ]
         if existing:
             print(
                 f"error: already exists: {', '.join(existing)} (pass --force to overwrite)",
@@ -489,17 +507,21 @@ def run_init(argv: list[str] | None = None) -> int:
 
     repo_slug = _detect_repo_slug(args.directory)
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
-
-    workflow_path.parent.mkdir(parents=True, exist_ok=True)
-    workflow_path.write_text(WORKFLOW_TEMPLATE.format(ref=args.ref), encoding="utf-8")
-
-    ci_path.parent.mkdir(parents=True, exist_ok=True)
-    ci_path.write_text(CI_WORKFLOW_TEMPLATE.format(ref=args.ref), encoding="utf-8")
-
-    agents_path.write_text(TOPIC_AGENTS_TEMPLATE.format(ref=args.ref, repo_slug=repo_slug), encoding="utf-8")
-    claude_path.write_text(TOPIC_CLAUDE_TEMPLATE, encoding="utf-8")
+    files = {
+        config_path: config_text if config_text is not None else CONFIG_TEMPLATE,
+        workflow_path: WORKFLOW_TEMPLATE.format(ref=args.ref),
+        ci_path: CI_WORKFLOW_TEMPLATE.format(ref=args.ref),
+        agents_path: TOPIC_AGENTS_TEMPLATE.format(ref=args.ref, repo_slug=repo_slug),
+        claude_path: TOPIC_CLAUDE_TEMPLATE,
+    }
+    try:
+        for path, text in files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w" if args.force else "x", encoding="utf-8") as handle:
+                handle.write(text)
+    except OSError as exc:
+        print(f"error: {exc}; inspect any files created before the failure", file=sys.stderr)
+        return 1
 
     print(f"Created {config_path}")
     print(f"Created {workflow_path}")
@@ -507,8 +529,16 @@ def run_init(argv: list[str] | None = None) -> int:
     print(f"Created {agents_path}")
     print(f"Created {claude_path}")
     print()
+    instructions = NEXT_STEPS
+    if config_text is not None:
+        instructions = (
+            "Configuration validated locally. Review config/feeds.toml, then build a dry preview:\n\n"
+            '  uvx --from "git+https://github.com/LPF9000/sundry.git@{ref}" \\\n'
+            "    sundry --config {config_path} --html-output /tmp/preview.html --no-write-cache --no-archive\n\n"
+            "2. In" + NEXT_STEPS.split("\n2. In", 1)[1]
+        )
     print(
-        NEXT_STEPS.format(
+        instructions.format(
             config_path=config_path,
             workflow_path=workflow_path,
             ci_path=ci_path,

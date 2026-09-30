@@ -5,6 +5,13 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Add an optional Textual research workspace with a command transcript, saved
+  edition details, experimental reranks, and confirmed local capture/rating writes.
+- Add a separate guided Textual setup mode with source/category forms, ranking
+  preferences, validated TOML previews and existing-file protection.
+- Add frozen-edition audits, shared review queues, explicit access evidence,
+  similar-title diagnostics and holdout story-overlap checks.
+
 - Add immutable daily CLI editions, editorial ratings, comparable multi-day
   benchmarks and experiment history with quality/count gates and supply alerts.
 - Normalize article identity, rotate previously sent reading, expose configurable

@@ -36,6 +36,8 @@ manual activation is unnecessary. To view CLI help:
 uv run sundry --help
 uv run sundry lab --help
 uv run sundry lab capture --help
+uv run sundry workspace --help
+uv run sundry setup --help
 ```
 
 ## Before opening a PR
@@ -62,6 +64,17 @@ uv run python -m sundry \
 
 If you added or changed a dependency in `pyproject.toml`, run `uv lock`
 and commit the updated `uv.lock` alongside it.
+
+Terminal work uses optional Rich/Textual dependencies, included in the dev extra.
+Keep the plain CLI and JSON usable without them. Test keyboard/mouse navigation,
+resize, cancellation, errors, existing-config protection and unchanged frozen
+files. Also try changes in a real terminal; headless tests cover behavior, not
+human visual acceptance. See [terminal modes](./docs/terminal.md).
+
+Editorial changes need identical candidate inputs and content-specific reviews.
+Audit reports and holdout manifests supplement the benchmark; they do not replace
+its volume/relevance gates. Preserve original editions and review provenance. See
+[the audit protocol](./docs/editorial-audit.md).
 
 ## What makes a good PR here
 

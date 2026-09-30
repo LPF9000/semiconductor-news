@@ -37,6 +37,12 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 EPILOG = """\
 examples:
+  # Open the optional interactive research workspace
+  sundry workspace
+
+  # Configure a topic interactively in your own repository
+  sundry setup --scaffold .
+
   # Scaffold config/feeds.toml + a caller workflow in a new topic repo
   sundry init
 
@@ -256,6 +262,14 @@ def _digest_subject(digest_name: str, run_date: str, total_shown: int, *, replay
 
 def main(argv: list[str] | None = None) -> int:
     raw_argv = sys.argv[1:] if argv is None else argv
+    if raw_argv[:1] == ["setup"]:
+        from .setup import run_setup
+
+        return run_setup(raw_argv[1:])
+    if raw_argv[:1] == ["workspace"]:
+        from .workspace import run_workspace
+
+        return run_workspace(raw_argv[1:])
     if raw_argv[:1] == ["lab"]:
         from .lab import run_lab
 
