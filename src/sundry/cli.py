@@ -329,12 +329,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             raw_articles, failures = fetch_all(config, start=end - timedelta(days=config.lookback_days), end=end)
             # Retain recent candidates that have rolled out of a source's live RSS feed.
+            current_urls = {canonical_url(a.link) for a in raw_articles}
             if args.history_dir.exists():
-                for previous in sorted(args.history_dir.glob("????-??-??.json")):
+                for previous in sorted(args.history_dir.glob("????-??-??.json"), reverse=True):
                     if (end - timedelta(days=config.lookback_days)).date().isoformat() <= previous.stem < run_date:
                         saved, _ = load_snapshot(previous)
-                        raw_articles.extend(a for a in saved if a.published is not None)
-            raw_articles = list({article.link: article for article in raw_articles}.values())
+                        missing = [
+                            a for a in saved if a.published is not None and canonical_url(a.link) not in current_urls
+                        ]
+                        raw_articles.extend(missing)
+                        current_urls.update(canonical_url(a.link) for a in missing)
+            raw_articles = deduplicate(raw_articles, config.source_weights)
             if args.date:
                 failures.append("Historical search: RSS items are limited to entries still present in current feeds")
             elif not args.no_write_cache:

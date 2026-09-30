@@ -14,6 +14,7 @@ from sundry.config import load_config
 from sundry.fetchers.arxiv import fetch_arxiv
 from sundry.fetchers.hackernews import fetch_hn_query
 from sundry.history import load_snapshot, save_snapshot
+from sundry.identity import deduplicate
 from sundry.models import Article, ArxivSource
 
 CONFIG = load_config(Path(__file__).parents[1] / "examples/feeds.toml")
@@ -220,3 +221,43 @@ def test_search_apis_receive_date_constraints():
     from urllib.parse import unquote
 
     assert "submittedDate:[202608260000 TO 202609242359]" in unquote(session.get.call_args.args[0])
+
+
+def test_duplicate_content_ties_are_independent_of_input_order():
+    original = article("UVM checking", summary="Abstract A")
+    alternate = replace(original, summary="Abstract B", forced_category="dv_uvm")
+    assert deduplicate([original, alternate], {}) == deduplicate([alternate, original], {})
+
+
+def test_history_never_overwrites_live_and_retains_only_latest_missing_copy(tmp_path, monkeypatch):
+    now = datetime.now(UTC)
+    history = tmp_path / "history"
+    live = replace(article("UVM live", summary="new"), published=now - timedelta(hours=1))
+    old_live = replace(live, summary="stale and longer abstract")
+    missing = replace(article("UVM missing", summary="latest stored"), published=now - timedelta(days=2))
+    old_missing = replace(missing, summary="older stored and longer")
+    save_snapshot(history / f"{(now - timedelta(days=2)).date()}.json", [old_live, old_missing], [])
+    save_snapshot(history / f"{(now - timedelta(days=1)).date()}.json", [old_live, missing], [])
+    monkeypatch.setattr("sundry.cli.fetch_all", lambda *a, **kw: ([live, live], []))
+    output = tmp_path / "candidates.json"
+    assert (
+        main(
+            [
+                "--config",
+                str(Path(__file__).parents[1] / "examples/feeds.toml"),
+                "--history-dir",
+                str(history),
+                "--candidates-output",
+                str(output),
+                "--html-output",
+                str(tmp_path / "preview.html"),
+                "--cache-path",
+                str(tmp_path / "seen.json"),
+                "--no-write-cache",
+                "--no-archive",
+            ]
+        )
+        == 0
+    )
+    candidates, _ = load_snapshot(output)
+    assert {a.link: a.summary for a in candidates} == {live.link: live.summary, missing.link: missing.summary}

@@ -100,6 +100,23 @@ def _validated_edition(folder: Path) -> dict[str, Any]:
     for filename, key in (("candidates.json", "candidates_sha256"), ("config.toml", "config_sha256")):
         if hashlib.sha256((folder / filename).read_bytes()).hexdigest() != edition[key]:
             raise ValueError(f"Edition integrity check failed: {folder / filename}")
+    if edition["date"] != folder.name:
+        raise ValueError(f"Edition date does not match directory: {folder}")
+    day = date.fromisoformat(edition["date"])
+    cutoff = datetime.fromisoformat(edition["cutoff"])
+    if cutoff.tzinfo is None or not datetime.combine(day, time.min, UTC) <= cutoff <= datetime.combine(
+        day + timedelta(days=1), time.min, UTC
+    ):
+        raise ValueError(f"Edition cutoff is outside its UTC date: {folder}")
+    candidates, _ = load_snapshot(folder / "candidates.json")
+    valid_rows = {json.dumps(row, sort_keys=True) for row in _rows(candidates)}
+    urls: set[str] = set()
+    for rows in edition["sections"].values():
+        for row in rows:
+            key = canonical_url(row["url"])
+            if json.dumps(row, sort_keys=True) not in valid_rows or key in urls:
+                raise ValueError(f"Edition contains changed or duplicate article rows: {folder}")
+            urls.add(key)
     return edition
 
 
@@ -358,6 +375,10 @@ def benchmark(
         (day.isoformat(), _read_json(store / day.isoformat() / "edition.json")["candidates_sha256"])
         for day in sorted(days)
     ]
+    edition_context = [
+        (day.isoformat(), hashlib.sha256((store / day.isoformat() / "edition.json").read_bytes()).hexdigest())
+        for day in sorted(days)
+    ]
     return {
         "schema_version": 1,
         "category": category,
@@ -365,6 +386,7 @@ def benchmark(
         "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
         "engine_sha256": _engine_hash(),
         "corpus_sha256": hashlib.sha256(json.dumps(corpus).encode()).hexdigest(),
+        "edition_context_sha256": hashlib.sha256(json.dumps(edition_context).encode()).hexdigest(),
         "baseline_mode": "configuration on same candidates" if baseline_config else "frozen original editions",
         "baseline_config_sha256": hashlib.sha256(baseline_config_path.read_bytes()).hexdigest()
         if baseline_config_path

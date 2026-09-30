@@ -165,3 +165,27 @@ def test_baseline_config_comparison_uses_identical_candidates(tmp_path):
     assert result["passed"]
     assert result["summary"]["baseline"]["count"] == 1
     assert result["summary"]["candidate"]["count"] == 2
+
+
+def test_edition_context_fingerprint_changes_with_valid_cutoff(tmp_path):
+    config, store, articles = setup_capture(tmp_path)
+    for article in articles:
+        add_rating(store, content_id(article), "dv", 3, "research", "Direct DV topic", "editor")
+    original = benchmark(store, config, "dv", [date(2026, 1, 2)])
+    path = store / "2026-01-02/edition.json"
+    edition = json.loads(path.read_text())
+    edition["cutoff"] = "2026-01-02T23:00:00+00:00"
+    path.write_text(json.dumps(edition))
+    changed = benchmark(store, config, "dv", [date(2026, 1, 2)])
+    assert changed["corpus_sha256"] == original["corpus_sha256"]
+    assert changed["edition_context_sha256"] != original["edition_context_sha256"]
+
+
+def test_frozen_rows_cannot_invent_reviewed_content(tmp_path):
+    config, store, _ = setup_capture(tmp_path)
+    path = store / "2026-01-02/edition.json"
+    edition = json.loads(path.read_text())
+    edition["sections"]["dv"][0]["title"] = "Changed title without review"
+    path.write_text(json.dumps(edition))
+    with pytest.raises(ValueError, match="changed or duplicate"):
+        benchmark(store, config, "dv", [date(2026, 1, 2)])

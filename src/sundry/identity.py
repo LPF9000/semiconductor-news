@@ -37,8 +37,17 @@ def deduplicate(articles: list[Article], source_weights: dict[str, float]) -> li
     """Prefer the richest abstract, then attribution and link, independently of fetch completion order."""
     selected: dict[str, Article] = {}
 
-    def quality(article: Article) -> tuple[int, float, str, str]:
-        return len(article.summary), source_weights.get(article.source, 0), article.source, article.link
+    def quality(article: Article) -> tuple[int, float, str, str, str, str, str, str]:
+        return (
+            len(article.summary),
+            source_weights.get(article.source, 0),
+            article.source,
+            article.link,
+            article.title,
+            article.summary,
+            article.published.isoformat() if article.published else "",
+            article.forced_category or "",
+        )
 
     for article in articles:
         key = canonical_url(article.link)
