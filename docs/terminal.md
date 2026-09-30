@@ -97,12 +97,17 @@ From a development checkout, choose a local config destination:
 uv run sundry setup --output config/my-topic-feeds.toml
 ```
 
-The five steps cover title/destination, sources, categories, ranking and a
-validated TOML preview. The first step can create a config only or scaffold a new
-topic repository with config, workflows and agent instructions. Choose a new
-repository directory when scaffolding; existing files remain protected. Choose RSS, arXiv or Hacker News to enter each type; switching types
-retains previous entries. RSS/arXiv use one `Name | URL or query` per line;
-Hacker News uses comma-separated queries.
+Setup asks one question at a time: title, creation mode, destination, RSS / Atom,
+arXiv, Hacker News, categories, and ranking. Enter accepts each answer and advances;
+Up/Down changes a selection. Ctrl+P goes back and retains your answers. There are
+no bottom navigation buttons. In feed/category editors, Shift+Enter adds a new
+line; Enter continues. Paste multiple lines freely. Each question includes a
+format explanation and examples; guidance scrolls in short terminals while the
+answer field and footer stay visible.
+
+Source types appear in sequence so you can combine them. Leave an unused source
+field blank; at least one source or query is required. RSS/Atom and arXiv use one
+`Name | URL or query` per line; Hacker News uses comma-separated queries.
 
 Categories use one line per category:
 
@@ -115,9 +120,9 @@ offers neutral defaults or custom preferred/demoted phrases. Advanced fields,
 including source weights, blurbs, keyword weights and section minimums, can be
 edited in the resulting TOML using the documented schema.
 
-Ctrl+N advances, Ctrl+P goes back, and Ctrl+Q cancels. The final screen lists the
-destination and requires selecting the confirmation checkbox before creating
-files. Existing files, including symlinks, are protected. Cancellation creates
+Ctrl+Q cancels. After reviewing the TOML preview, Enter opens the final
+confirmation question. It lists every destination and requires typing `CREATE`
+then pressing Enter before creating files. Existing files, including symlinks, are protected. Cancellation creates
 no files. Setup does not fetch feeds, send email, set secrets or change GitHub
 settings. A locally valid config still needs a dry live preview and the email
 settings described in README.md. `sundry init` remains the noninteractive path.

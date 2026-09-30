@@ -5,6 +5,9 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Guide interactive setup one answer at a time with Enter/Back controls, source
+  and category examples, visible editors in short terminals and typed confirmation.
+
 - Launch guided setup and the workspace with bare `uv run sundry` in a terminal;
   retain explicit batch builds and nonterminal behavior.
 - Add slash completion, colored command/result tables, selectable transcript,

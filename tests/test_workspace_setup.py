@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from test_terminal import frozen_store
-from textual.widgets import Checkbox, Input, Select, TextArea
+from textual.widgets import Button, Footer, Input, Select, TextArea
 
 from sundry.cli import main
 from sundry.config import load_config
@@ -62,38 +62,53 @@ def test_setup_validation(field, value):
         configuration({**VALUES, field: value})
 
 
+def fill_setup(app):
+    for field in ("name", "hn", "preferred", "demoted"):
+        app.query_one(f"#{field}", Input).value = VALUES[field]
+    for field in ("rss", "arxiv", "categories"):
+        app.query_one(f"#{field}", TextArea).load_text(VALUES[field])
+
+
+async def advance_setup(app, pilot, target):
+    for _ in range(15):
+        if app.field == target:
+            return
+        await pilot.press("enter")
+        await pilot.pause()
+    raise AssertionError(f"Did not reach {target}: {app.field}")
+
+
 def test_setup_cancel_confirm_navigation_and_scaffold(tmp_path):
     async def exercise():
         output = tmp_path / "cancelled.toml"
         app = SetupWizard(output)
         async with app.run_test(size=(80, 30)) as pilot:
-            await pilot.pause()
             await pilot.press("ctrl+q")
         assert not output.exists()
         repo = tmp_path / "repo"
         app = SetupWizard(Path("config/feeds.toml"), repo)
         async with app.run_test(size=(80, 30)) as pilot:
-            for field in ("name", "hn", "preferred", "demoted"):
-                app.query_one(f"#{field}", Input).value = VALUES[field]
-            for field in ("rss", "arxiv", "categories"):
-                app.query_one(f"#{field}", TextArea).load_text(VALUES[field])
+            fill_setup(app)
             app.query_one("#ranking", Select).value = "custom"
             await pilot.pause()
-            for _ in range(4):
-                await pilot.press("ctrl+n")
-                await pilot.pause()
-            assert app.step == 4
+            await advance_setup(app, pilot, "preview")
             assert not repo.exists()
-            await pilot.press("ctrl+n")
-            assert not repo.exists()  # Checkbox must be explicitly selected.
-            await pilot.press("ctrl+p")
-            assert app.step == 3
-            await pilot.press("ctrl+n")
+            await pilot.press("enter")
             await pilot.pause()
-            await pilot.click("#confirm")
-            assert app.query_one(Checkbox).value
+            assert app.field == "confirm"
+            await pilot.press("enter")
+            assert not repo.exists()
+            await pilot.press("ctrl+p")
+            await pilot.pause()
+            assert app.field == "preview"
+            await pilot.press("ctrl+p")
+            await pilot.pause()
+            assert app.field == "demoted"
+            assert app.query_one("#preferred", Input).value == VALUES["preferred"]
+            await advance_setup(app, pilot, "confirm")
             await pilot.resize_terminal(60, 24)
-            await pilot.press("ctrl+n")
+            app.query_one("#confirm", Input).value = "CREATE"
+            await pilot.press("enter")
             await pilot.pause()
         assert load_config(repo / "config/feeds.toml").preferred_keywords == ("research",)
         assert (repo / ".github/workflows/digest.yml").exists()
@@ -251,36 +266,94 @@ def test_setup_destination_choice_and_protection(tmp_path):
         app = SetupWizard(tmp_path / "unused.toml")
         repo = tmp_path / "topic"
         async with app.run_test(size=(80, 30)) as pilot:
-            app.query_one("#destination_mode", Select).value = "scaffold"
-            app.query_one("#destination", Input).value = str(repo)
-            for field in ("name", "hn", "preferred", "demoted"):
-                app.query_one(f"#{field}", Input).value = VALUES[field]
-            for field in ("rss", "arxiv", "categories"):
-                app.query_one(f"#{field}", TextArea).load_text(VALUES[field])
+            fill_setup(app)
+            await pilot.press("enter")
             await pilot.pause()
-            for _ in range(4):
-                await pilot.press("ctrl+n")
-                await pilot.pause()
+            assert app.field == "destination_mode"
+            await pilot.press("down", "enter")
+            await pilot.pause()
+            assert app.field == "destination"
+            app.query_one("#destination", Input).value = str(repo)
+            await advance_setup(app, pilot, "confirm")
             assert app.scaffold == repo
-            app.query_one("#confirm", Checkbox).value = True
-            await pilot.press("ctrl+n")
+            app.query_one("#confirm", Input).value = "CREATE"
+            await pilot.press("enter")
             await pilot.pause()
         assert (repo / ".github/workflows/digest.yml").exists()
         before = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
         app = SetupWizard(Path("config/feeds.toml"), repo)
         async with app.run_test(size=(80, 30)) as pilot:
-            app.query_one("#name", Input).value = "Another digest"
-            app.query_one("#hn", Input).value = "another topic"
-            app.query_one("#categories", TextArea).load_text(VALUES["categories"])
-            for _ in range(4):
-                await pilot.press("ctrl+n")
-                await pilot.pause()
-            app.query_one("#confirm", Checkbox).value = True
-            await pilot.press("ctrl+n")
+            fill_setup(app)
+            await advance_setup(app, pilot, "confirm")
+            app.query_one("#confirm", Input).value = "CREATE"
+            await pilot.press("enter")
             await pilot.pause()
             assert "existing files" in str(app.query_one("#error").content)
             await pilot.press("ctrl+q")
         assert before == {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("size", [(80, 24), (50, 18)])
+def test_guided_setup_fields_examples_and_multiline(tmp_path, size):
+    async def exercise():
+        app = SetupWizard(tmp_path / "feeds.toml")
+        async with app.run_test(size=size) as pilot:
+            assert not app.query(Button)
+            assert app.field == "name"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "name"  # A blank title stays on the current question.
+            app.query_one("#name", Input).value = "My topic"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "destination_mode"
+            assert not app.query_one("#name").display
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "destination"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "rss"
+            assert "feed URL" in str(app.query_one("#hint").content)
+            assert app.query_one("#rss").region.bottom <= app.query_one(Footer).region.y
+            assert "https://example.org" in str(app.query_one("#example").content)
+            area = app.query_one("#rss", TextArea)
+            area.load_text("Invalid | file:///etc/passwd")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "rss"
+            assert "HTTP(S)" in str(app.query_one("#error").content)
+            area.load_text(VALUES["rss"])
+            area.move_cursor((0, len(VALUES["rss"])))
+            await pilot.press("shift+enter")
+            assert area.text.endswith("\n")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "arxiv"
+            assert "cat:cs.RO" in str(app.query_one("#example").content)
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "hn"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "categories"
+            assert "comma-separated keywords" in str(app.query_one("#hint").content)
+            app.query_one("#categories", TextArea).load_text(VALUES["categories"])
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "ranking"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "preview"  # Neutral skips the two custom preference questions.
+            await pilot.press("ctrl+p")
+            await pilot.pause()
+            assert app.field == "ranking"
+            assert app.query_one(Footer).region.bottom <= size[1]
+            app.save_screenshot(f"setup-guided-{size[0]}.svg", path="/tmp")
+            await pilot.press("ctrl+q")
+        assert not (tmp_path / "feeds.toml").exists()
 
     asyncio.run(exercise())
 

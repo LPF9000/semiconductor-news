@@ -58,7 +58,9 @@ For an interactive setup wizard in an empty topic repository, use:
 uvx --from "sundry[ui] @ git+https://github.com/LPF9000/sundry.git@main" sundry setup --scaffold .
 ```
 
-The wizard collects sources, categories and ranking preferences, validates a
+The wizard asks one question at a time, with examples: Enter continues, Ctrl+P
+goes back, and Shift+Enter adds a line in feed/category editors. It collects
+sources, categories and ranking preferences, validates a
 TOML preview, and asks you to confirm before creating files. Existing files are
 protected. See [terminal setup](./docs/terminal.md#guided-setup).
 
@@ -267,7 +269,8 @@ uv run sundry
 
 With no topic config, this opens guided setup. Choose a config file or a new
 empty topic repository with scheduled workflows, review the preview, and confirm
-the files. Setup then opens the research workspace. Existing files are protected.
+the files by typing `CREATE`. Setup asks one question at a time with examples;
+Enter advances and Ctrl+P goes back. Setup then opens the research workspace. Existing files are protected.
 Local `uv run` installs the terminal dependencies automatically; installed engine
 packages still offer them through the optional `ui` extra.
 
