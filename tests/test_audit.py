@@ -7,7 +7,7 @@ import pytest
 from test_terminal import frozen_store
 
 from sundry.audit import audit, holdout_manifest, load_access, similar_titles
-from sundry.lab import add_rating, run_lab
+from sundry.lab import _validated_edition, add_rating, run_lab
 
 
 def test_audit_missing_ratings_repetition_and_integrity(tmp_path):
@@ -86,3 +86,11 @@ def test_access_evidence_and_similarity_are_explicit(tmp_path):
     )
     assert len(pairs) == 1
     assert pairs[0]["similarity"] > 0.85
+
+
+@pytest.mark.parametrize("change", [{"sections": []}, {"sections": {"dv": None}}, {"warnings": [None]}])
+def test_corrupt_edition_has_actionable_error(tmp_path, change):
+    store, edition = frozen_store(tmp_path)
+    (store / "2026-01-02/edition.json").write_text(json.dumps({**edition, **change}))
+    with pytest.raises(ValueError, match="Malformed edition"):
+        _validated_edition(store / "2026-01-02")

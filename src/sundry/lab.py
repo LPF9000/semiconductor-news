@@ -98,6 +98,14 @@ def capture(config_path: Path, store: Path, day: date, candidates_input: Path | 
 
 def _validated_edition(folder: Path) -> dict[str, Any]:
     edition: dict[str, Any] = _read_json(folder / "edition.json")
+    if not isinstance(edition, dict) or not isinstance(edition.get("sections"), dict):
+        raise ValueError(f"Malformed edition: {folder}")
+    if any(not isinstance(key, str) or not isinstance(rows, list) for key, rows in edition["sections"].items()):
+        raise ValueError(f"Malformed edition sections: {folder}")
+    if not isinstance(edition.get("warnings", []), list) or any(
+        not isinstance(warning, str) for warning in edition.get("warnings", [])
+    ):
+        raise ValueError(f"Malformed edition warnings: {folder}")
     for filename, key in (("candidates.json", "candidates_sha256"), ("config.toml", "config_sha256")):
         if hashlib.sha256((folder / filename).read_bytes()).hexdigest() != edition[key]:
             raise ValueError(f"Edition integrity check failed: {folder / filename}")
