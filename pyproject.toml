@@ -22,7 +22,7 @@ Issues = "https://github.com/LPF9000/sundry/issues"
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0",
+  "pytest>=9.1.1",
   "pytest-cov>=5.0",
   "ruff>=0.6",
   "mypy>=2.3.1",
