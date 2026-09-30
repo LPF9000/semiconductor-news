@@ -20,7 +20,7 @@ See [status.md](status.md) for completed work and exact local state.
 5. Merge only after review and green CI. Then safely update the original checkout
    without overwriting its unrelated documentation edits, refresh consumer CI's
    engine pin if needed, and remove the new merged branch with recovery recorded.
-6. Recheck consumer main CI run 36653839634. Update these status files with the
+6. Consumer main CI run 36653839634 passed. Update these status files with the
    final PR, commit, checks and remaining limitations.
 
 ## Editorial quality and volume
@@ -63,4 +63,3 @@ See [status.md](status.md) for completed work and exact local state.
 - Confirm ownership of existing uncommitted README/CONTRIBUTING/AGENTS edits and
   include them in a dedicated review when authorized.
 - Continue plain, human documentation; no paid cloud PR review is configured.
-

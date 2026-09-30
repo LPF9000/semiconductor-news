@@ -14,8 +14,7 @@ and [cli.md](cli.md) for terminal commands.
   32df03daa54db14c534fa0d26692c3750f48d93c.
 - Engine main is 9846ceecdd4c4bc319d66f2e0d5226eeb02129f1;
   post-merge CI run 36653240025 passed. Both PRs passed all checks,
-  including live preview/email; caller post-merge run 36653839634 was still
-  running at the first handoff check (recheck before claiming it passed).
+  including live preview/email; caller post-merge run 36653839634 also passed.
 - Engine: contextual DV matching, configurable research/sales ranks,
   deterministic canonical deduplication, dated CLI links, saved candidates,
   immutable daily editions, human rating ledger, and comparable benchmarks.
@@ -31,6 +30,8 @@ and [cli.md](cli.md) for terminal commands.
 ## Terminal interface checkpoint
 
 Active branch: improve/terminal-interface. Worktree: /tmp/sundry-terminal-ui.
+PR: https://github.com/LPF9000/sundry/pull/38. Implementation commit: 414bd63.
+The implementation is committed and pushed; PR CI/review remain pending.
 It is separate from the original checkout to preserve unrelated documentation edits.
 
 Implemented: optional Rich/Textual UI extra; Rich terminal-only link tables;
@@ -102,4 +103,3 @@ search for an old day cannot reconstruct unknown past feed contents. Recent-read
 fallback is labeled; it is not newly published news. Source diversity remains
 research/arXiv-heavy; some public feeds return 403, and bounded API results issue
 warnings. Access preference needs verified metadata rather than publisher guesses.
-
