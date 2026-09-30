@@ -78,6 +78,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--candidates-output", type=Path, help="Save fetched candidates for rapid offline comparisons")
     parser.add_argument("--report-output", type=Path, help="Write candidate scores and selection decisions as JSON")
     parser.add_argument("--links", action="store_true", help="Print selected article titles and links to stdout")
+    parser.add_argument("--plain", action="store_true", help="Disable terminal decoration (pipes are always plain)")
     parser.add_argument("--links-output", type=Path, help="Save selected article titles and links as plain text")
     parser.add_argument("--max-items-per-section", type=int, help="Override every section's article limit for this run")
     parser.add_argument(
@@ -370,7 +371,19 @@ def main(argv: list[str] | None = None) -> int:
         for article in items
     )
     if args.links:
-        print(links)
+        from .lab import _rows
+        from .terminal import print_edition
+
+        print_edition(
+            {
+                "date": run_date,
+                "origin": "dated preview" if args.date else "live search",
+                "sections": {config.category_by_key()[key].title: _rows(items) for key, items in categorized.items()},
+                "warnings": failures,
+            },
+            links,
+            plain=args.plain,
+        )
     if args.links_output:
         args.links_output.parent.mkdir(parents=True, exist_ok=True)
         args.links_output.write_text(links, encoding="utf-8")

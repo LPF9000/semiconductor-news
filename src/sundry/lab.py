@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import math
+import sys
 import tempfile
 from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
@@ -407,9 +408,14 @@ def run_lab(argv: list[str]) -> int:
     cap.add_argument("--date", type=date.fromisoformat, default=datetime.now(UTC).date())
     cap.add_argument("--candidates-input", type=Path)
     cap.add_argument("--category")
+    cap.add_argument("--plain", action="store_true")
     display = sub.add_parser("show", help="Show original frozen links without reranking or network calls")
     display.add_argument("--date", type=date.fromisoformat, required=True)
     display.add_argument("--category")
+    display.add_argument("--plain", action="store_true")
+    browse = sub.add_parser("browse", help="Browse frozen editions interactively; no fetches, email, or writes")
+    browse.add_argument("--date", type=date.fromisoformat, help="Start on this date (default: latest capture)")
+    browse.add_argument("--category", help="Start with this section selected")
     review = sub.add_parser("rate", help="Append an editorial review: 0 unrelated, 1 marginal, 2 useful, 3 excellent")
     review.add_argument("--date", type=date.fromisoformat)
     locator = review.add_mutually_exclusive_group(required=True)
@@ -435,15 +441,24 @@ def run_lab(argv: list[str]) -> int:
     rerank.add_argument("--config", type=Path, default=Path("config/feeds.toml"))
     rerank.add_argument("--date", type=date.fromisoformat, required=True)
     rerank.add_argument("--category", required=True)
+    rerank.add_argument("--plain", action="store_true")
     trend = sub.add_parser("history", help="Show recorded experiments; compare only matching corpus and rating hashes")
     trend.add_argument("--category", required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         if args.command == "capture":
-            print(show(capture(args.config, args.store_dir, args.date, args.candidates_input), args.category))
+            _display_edition(capture(args.config, args.store_dir, args.date, args.candidates_input), args)
         elif args.command == "show":
-            print(show(_validated_edition(args.store_dir / args.date.isoformat()), args.category))
+            _display_edition(_validated_edition(args.store_dir / args.date.isoformat()), args)
+        elif args.command == "browse":
+            if not sys.stdin.isatty() or not sys.stdout.isatty():
+                raise ValueError("browse needs an interactive terminal; use lab show for pipes or CI")
+            try:
+                from .browser import EditionBrowser
+            except ImportError as exc:
+                raise ValueError("Install the browser with: uv sync --extra ui (or pip install 'sundry[ui]')") from exc
+            EditionBrowser(args.store_dir, args.date, args.category).run()
         elif args.command == "rate":
             if args.id:
                 add_rating(args.store_dir, args.id, args.category, args.grade, args.kind, args.notes, args.reviewer)
@@ -471,15 +486,13 @@ def run_lab(argv: list[str]) -> int:
                     )
         elif args.command == "rerank":
             result = benchmark(args.store_dir, args.config, args.category, [args.date])
-            print(
-                show(
-                    {
-                        "date": args.date.isoformat(),
-                        "origin": "experimental rerank",
-                        "sections": {args.category: result["days"][0]["selection"]},
-                    },
-                    args.category,
-                )
+            _display_edition(
+                {
+                    "date": args.date.isoformat(),
+                    "origin": "experimental rerank",
+                    "sections": {args.category: result["days"][0]["selection"]},
+                },
+                args,
             )
         else:
             days = args.dates or [
@@ -505,3 +518,13 @@ def run_lab(argv: list[str]) -> int:
         logger.error("%s", exc)
         return 1
     return 0
+
+
+def _display_edition(edition: dict[str, Any], args: argparse.Namespace) -> None:
+    from .terminal import print_edition
+
+    plain_text = show(edition, args.category)
+    filtered = dict(edition)
+    if args.category:
+        filtered["sections"] = {args.category: edition["sections"][args.category]}
+    print_edition(filtered, plain_text, plain=args.plain)
