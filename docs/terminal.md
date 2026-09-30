@@ -1,12 +1,19 @@
 # Terminal workspace and setup
 
-Install the optional terminal dependencies in a Sundry checkout:
+Launch directly from this checkout; the default terminal dependency group supplies
+Textual and Rich:
 
 ```bash
-uv sync --locked --extra ui
+uv run sundry
 uv run sundry workspace --help
 uv run sundry setup --help
 ```
+
+Bare `uv run sundry` opens setup if `config/feeds.toml` is missing, then opens the
+workspace after saving. With that config present, it opens the workspace directly.
+Cancelling setup writes nothing. `sundry build` explicitly runs the batch engine;
+build flags and pipes keep the existing behavior. Installed packages need the
+optional `ui` extra to launch interactive modes.
 
 ## Research workspace
 
@@ -21,23 +28,49 @@ Enter `/help` to see commands. Arguments containing spaces need quotes.
 
 | Command | Result |
 | --- | --- |
-| `/show YYYY-MM-DD [category]` | Original frozen links in their original order |
+| `/show [YYYY-MM-DD] [category]` | Original frozen links in their original order |
 | `/inspect YYYY-MM-DD ID` | Full captured article text and review identity |
-| `/rerank YYYY-MM-DD category` | Experimental ranking and benchmark diagnostics |
-| `/audit category` | Source mix, freshness, repetition and missing reviews |
-| `/history category` | Previously saved experiment summaries |
+| `/rerank [YYYY-MM-DD] [category]` | Experimental ranking and benchmark diagnostics |
+| `/audit [category]` | Source mix, freshness, repetition and missing reviews |
+| `/history [category]` | Previously saved experiment summaries |
 | `/browse [YYYY-MM-DD] [category]` | Optional article detail screen; `q` returns |
-| `/capture YYYY-MM-DD` | Confirm fetching and freezing a local edition |
+| `/capture [YYYY-MM-DD]` | Confirm fetching and freezing a local edition |
 | `/rate ID category GRADE KIND REVIEWER "rationale"` | Confirm appending a content-specific rating |
-| `/clear`, `/help`, `/quit` | Clear the transcript, show help, or exit |
+| `/dates`, `/categories`, `/config` | Captures, section limits and source configuration |
+| `/benchmark [category]` | Confirm saving a comparison across captured dates |
+| `/theme [name]` | Cycle palettes or choose a registered Textual theme |
+| `/setup` | Leave the workspace for guided configuration |
+| `/copy` | Copy selected text or the latest result |
+| `/clear`, `/help [command]`, `/quit` | Clear the transcript, show help, or exit |
 
-Up/down in the command input recalls commands. Ctrl+K focuses the prompt,
+Type `/` to see commands and filter as you type. Up/down selects suggestions,
+Tab completes, and Enter completes a partial command or submits an exact one.
+Click a suggestion to complete it. Escape dismisses suggestions. Without a visible
+list, Up/down recalls commands. Submitted failures clear the input and appear in
+the transcript with a useful error; they remain in history.
+
+Omitted dates use the latest capture, except `/capture`, which defaults to today
+in UTC. Dates accept `latest` and `today`. Omitted evaluation sections prefer a
+configured section with a minimum, then the first nongeneral section; without a
+config they use the latest frozen edition's first section. Empty stores give
+capture guidance.
+
+The palettes are `sundry-neon`, `sundry-ember` and `sundry-forest`. `/theme`
+cycles them. Interactive modes enable color by default; `workspace --no-color`
+uses monochrome. Plain CLI output still honors `NO_COLOR`.
+
+Drag to select transcript text. Ctrl+C copies a selection; Ctrl+Shift+C or `/copy`
+copies the selection or latest output through the terminal clipboard protocol.
+Clipboard support depends on the terminal. The transcript keeps at most 80 output
+blocks and renders again only when their width changes.
+
+ Ctrl+K focuses the prompt,
 Ctrl+L clears results, and Ctrl+Q exits. Tab, arrow keys and mouse navigation
 work on controls. In the detail screen, `/` focuses full-abstract search and
 `o` explicitly opens an HTTP(S) article URL in the browser.
 
 The workspace executes a fixed set of commands. It does not execute shell
-input, send mail, update production archives or write the seen cache. Capture
+input, send mail, update production archives or write the seen cache. Capture, benchmark
 and rating requests show their destination and require confirmation. Reads and
 reranks do not change editions. Missing or corrupted captures show an error.
 Long commands run separately so the interface can remain responsive; quitting
@@ -58,14 +91,16 @@ uvx --from "sundry[ui] @ git+https://github.com/LPF9000/sundry.git@main" \
   sundry setup --scaffold .
 ```
 
-From a development checkout, try a config at a new temporary path:
+From a development checkout, choose a local config destination:
 
 ```bash
-uv run sundry setup --output /tmp/my-topic-feeds.toml
+uv run sundry setup --output config/my-topic-feeds.toml
 ```
 
-The five steps cover title, sources, categories, ranking and a validated TOML
-preview. Choose RSS, arXiv or Hacker News to enter each type; switching types
+The five steps cover title/destination, sources, categories, ranking and a
+validated TOML preview. The first step can create a config only or scaffold a new
+topic repository with config, workflows and agent instructions. Choose a new
+repository directory when scaffolding; existing files remain protected. Choose RSS, arXiv or Hacker News to enter each type; switching types
 retains previous entries. RSS/arXiv use one `Name | URL or query` per line;
 Hacker News uses comma-separated queries.
 

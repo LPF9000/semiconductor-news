@@ -35,6 +35,12 @@ dev = [
 [project.scripts]
 sundry = "sundry.cli:main"
 
+[dependency-groups]
+terminal = ["rich>=14,<15", "textual>=6,<9"]
+
+[tool.uv]
+default-groups = ["terminal"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

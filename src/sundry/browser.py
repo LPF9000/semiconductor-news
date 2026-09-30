@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from rich.text import Text
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Select, Static
@@ -17,6 +17,7 @@ from textual.widgets import DataTable, Footer, Header, Input, Select, Static
 from .history import load_snapshot
 from .identity import content_id
 from .lab import _validated_edition, show
+from .ui_style import SundryApp
 
 
 class EditionScreen(Screen[None]):
@@ -160,7 +161,7 @@ class EditionScreen(Screen[None]):
             self.app.pop_screen()
 
 
-class EditionBrowser(App[None]):
+class EditionBrowser(SundryApp[None]):
     """Standalone entry point for the workspace's optional edition detail view."""
 
     TITLE = EditionScreen.TITLE

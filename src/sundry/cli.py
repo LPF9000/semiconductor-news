@@ -37,7 +37,10 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 EPILOG = """\
 examples:
-  # Open the optional interactive research workspace
+  # Start guided setup or the research workspace in a terminal
+  sundry
+
+  # Open a workspace with explicit configuration and capture store
   sundry workspace
 
   # Configure a topic interactively in your own repository
@@ -47,7 +50,7 @@ examples:
   sundry init
 
   # Build today's digest using config/feeds.toml, exactly as a daily workflow does
-  sundry
+  sundry build
 
   # Preview a build without touching committed state (safe to run anytime)
   sundry --html-output /tmp/preview.html --no-write-cache --no-archive
@@ -262,6 +265,13 @@ def _digest_subject(digest_name: str, run_date: str, total_shown: int, *, replay
 
 def main(argv: list[str] | None = None) -> int:
     raw_argv = sys.argv[1:] if argv is None else argv
+    if not raw_argv and sys.stdin.isatty() and sys.stdout.isatty():
+        from .workspace import launch_interactive
+
+        return launch_interactive()
+    if raw_argv[:1] == ["build"]:
+        raw_argv = raw_argv[1:]
+        argv = raw_argv
     if raw_argv[:1] == ["setup"]:
         from .setup import run_setup
 

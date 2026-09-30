@@ -5,6 +5,13 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Launch guided setup and the workspace with bare `uv run sundry` in a terminal;
+  retain explicit batch builds and nonterminal behavior.
+- Add slash completion, colored command/result tables, selectable transcript,
+  clipboard controls, custom palettes and responsive prompt borders.
+- Resolve date/section defaults, clear failed submissions, isolate command errors,
+  and offer config or repository destinations in guided setup.
+
 - Add an optional Textual research workspace with a command transcript, saved
   edition details, experimental reranks, and confirmed local capture/rating writes.
 - Add a separate guided Textual setup mode with source/category forms, ranking

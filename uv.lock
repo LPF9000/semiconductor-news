@@ -777,6 +777,12 @@ ui = [
     { name = "textual" },
 ]
 
+[package.dev-dependencies]
+terminal = [
+    { name = "rich" },
+    { name = "textual" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "feedparser", specifier = ">=6.0,<7" },
@@ -792,6 +798,12 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'dev'" },
 ]
 provides-extras = ["ui", "dev"]
+
+[package.metadata.requires-dev]
+terminal = [
+    { name = "rich", specifier = ">=14,<15" },
+    { name = "textual", specifier = ">=6,<9" },
+]
 
 [[package]]
 name = "textual"

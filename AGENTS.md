@@ -222,8 +222,10 @@ The optional Textual interface has two separate modes: `sundry workspace` for
 interactive research/evaluation commands, and `sundry setup` for local guided
 configuration. Setup must run in a topic repository or at an explicit new output
 path, with preview and confirmation before writes. Protect existing configs and
-retain the noninteractive `init`, plain CLI and JSON paths. UI dependencies must
-remain optional. See docs/terminal.md and docs/editorial-audit.md.
+retain the noninteractive `init`, plain CLI and JSON paths. UI dependencies remain optional for installed packages; the checkout defaults
+to the terminal dependency group. Bare `uv run sundry` in a terminal launches
+setup for a missing config, then the workspace. Use `sundry build` for an explicit
+batch run; invocations with build flags and pipes retain batch behavior. See docs/terminal.md and docs/editorial-audit.md.
 
 `lab audit` reports original frozen selections and missing reviews; `lab holdout`
 checks canonical-story separation from a tuning store. These checks do not supply
@@ -237,7 +239,8 @@ continue to use the `uvx` setup workflow above.
 
 ```bash
 uv sync --locked --extra dev     # install
-uv run sundry --help             # CLI help
+uv run sundry                    # interactive setup/workspace
+uv run sundry build --help       # batch CLI help
 uv run sundry lab --help         # evaluation command help
 uv run sundry lab capture --help # subcommand help
 uv run sundry workspace --help   # interactive command workspace

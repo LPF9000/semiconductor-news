@@ -33,7 +33,8 @@ Run local commands with `uv run`; it handles the project environment, so
 manual activation is unnecessary. To view CLI help:
 
 ```bash
-uv run sundry --help
+uv run sundry                    # interactive setup/workspace
+uv run sundry build --help       # explicit batch help
 uv run sundry lab --help
 uv run sundry lab capture --help
 uv run sundry workspace --help

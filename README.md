@@ -259,21 +259,35 @@ how often you run it.
 
 ## Interactive terminal
 
-The optional Textual interface provides a research command workspace and a
-separate guided configuration wizard. In this checkout:
+In this checkout, start the Textual interface directly:
 
 ```bash
-uv sync --locked --extra ui
-uv run sundry workspace --config examples/feeds.toml --store-dir /path/to/evaluation
-uv run sundry setup --output /tmp/new-topic-feeds.toml
+uv run sundry
 ```
 
-The workspace has a command prompt, history, status and transcript. Enter `/help`
-for frozen links, full article inspection, reranking, auditing and the optional
-edition detail view. Capture and rating writes require confirmation. The wizard
-previews a validated config before writing and protects existing files. Neither
-mode sends mail or updates production archives/cache. See
-[terminal controls and examples](./docs/terminal.md).
+With no topic config, this opens guided setup. Choose a config file or a new
+empty topic repository with scheduled workflows, review the preview, and confirm
+the files. Setup then opens the research workspace. Existing files are protected.
+Local `uv run` installs the terminal dependencies automatically; installed engine
+packages still offer them through the optional `ui` extra.
+
+To explore the example configuration or choose a capture store:
+
+```bash
+uv run sundry workspace --config examples/feeds.toml --store-dir evaluation
+uv run sundry setup --output config/my-topic-feeds.toml
+```
+
+Type `/` for selectable command suggestions, or `/help` for a colored command
+table. The workspace includes history, selectable output, copy, three custom
+palettes, frozen article browsing and evaluation commands. Commands such as
+`/show`, `/audit` and `/rerank` resolve useful date/section defaults. Capture,
+rating and saved benchmark writes require confirmation. Neither interactive
+mode sends mail or updates production archives/cache.
+
+Use `uv run sundry build` for an explicit batch build. Arguments such as
+`--config` and nonterminal invocations retain the existing batch behavior.
+See [terminal controls and examples](./docs/terminal.md).
 
 ## Setting up email (required, one-time)
 

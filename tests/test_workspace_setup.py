@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 from test_terminal import frozen_store
-from textual.widgets import Checkbox, Input, RichLog, Select, TextArea
+from textual.widgets import Checkbox, Input, Select, TextArea
 
 from sundry.cli import main
 from sundry.config import load_config
 from sundry.setup import configuration, save_configuration
 from sundry.setup_ui import SetupWizard
 from sundry.workspace import execute, parse_command
-from sundry.workspace_ui import Workspace
+from sundry.workspace_ui import OutputBlock, Workspace
 
 VALUES = {
     "name": 'My "topic" digest',
@@ -126,7 +126,7 @@ def test_workspace_readonly_commands_and_confirmation(tmp_path):
             await app.workers.wait_for_complete()
             await pilot.pause()
             assert not app.busy
-            assert app.query_one(RichLog).lines
+            assert any("[bold] verification" in block.plain for block in app.query(OutputBlock))
             await pilot.press("up")
             assert prompt.value == "/show 2026-01-02 dv"
             prompt.value = "/capture 2026-01-04"
@@ -154,3 +154,173 @@ def test_new_modes_require_terminal(capsys):
     assert main(["workspace"]) == 1
     assert main(["setup"]) == 1
     assert "interactive terminal" in capsys.readouterr().err
+
+
+def test_bare_terminal_launch_and_explicit_build(monkeypatch):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("sundry.workspace.launch_interactive", lambda: 42)
+    assert main([]) == 42
+    monkeypatch.setattr("sundry.cli.parse_args", lambda args: (_ for _ in ()).throw(RuntimeError(str(args))))
+    with pytest.raises(RuntimeError, match=r"\[\]"):
+        main(["build"])
+
+
+def test_default_commands_and_literal_rendering(tmp_path):
+    import io
+
+    from rich.console import Console
+
+    from sundry.workspace import execute_data
+    from sundry.workspace_render import render_result
+
+    store, _ = frozen_store(tmp_path)
+    config = tmp_path / "feeds.toml"
+    assert execute_data(parse_command("/show"), store, config)["edition"]["date"] == "2026-01-03"
+    assert execute_data(parse_command("/audit"), store, config)["kind"] == "audit"
+    assert execute_data(parse_command("/categories"), store, config)["sections"][0]["key"] == "dv"
+    output = io.StringIO()
+    Console(file=output, width=50).print(render_result(execute_data(["show"], store, config)))
+    assert "[bold] verification" in output.getvalue()
+    with pytest.raises(ValueError, match="No captured editions"):
+        execute_data(["show"], tmp_path / "empty", config)
+
+
+@pytest.mark.parametrize("size", [(80, 24), (50, 18)])
+def test_completion_errors_layout_and_themes(tmp_path, size):
+    from textual.widgets import Footer, OptionList
+
+    async def exercise():
+        app = Workspace(tmp_path / "empty", tmp_path / "missing.toml")
+        async with app.run_test(size=size) as pilot:
+            prompt = app.query_one(Input)
+            prompt.value = "/sh"
+            await pilot.pause()
+            assert app.matches == ["show"]
+            await pilot.press("tab")
+            await pilot.pause()
+            assert prompt.value == "/show "
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert prompt.value == ""
+            assert any("No captured editions" in block.plain for block in app.query(OutputBlock))
+            prompt.value = "/wrong"
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert prompt.value == ""
+            assert any("Unknown command /wrong" in block.plain for block in app.query(OutputBlock))
+            assert app.commands[-1] == "/wrong"
+            prompt.value = "/"
+            await pilot.pause()
+            assert len(app.matches) == 18
+            await pilot.press("down", "tab")
+            await pilot.pause()
+            assert prompt.value == "/dates "
+            prompt.value = "/help"
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert any("COMMAND REFERENCE" in block.plain for block in app.query(OutputBlock))
+            assert prompt.region.height == 3
+            assert prompt.region.bottom <= app.query_one(Footer).region.y
+            assert not app.query_one(OptionList).display
+            prompt.value = "/theme sundry-ember"
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.theme == "sundry-ember"
+            app.save_screenshot(f"workspace-{size[0]}.svg", path="/tmp")
+
+    asyncio.run(exercise())
+
+
+def test_color_preference_preserves_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    Workspace(tmp_path, tmp_path / "config.toml")
+    import os
+
+    assert os.environ["NO_COLOR"] == "1"
+    Workspace(tmp_path, tmp_path / "config.toml", color_enabled=False)
+    assert os.environ["NO_COLOR"] == "1"
+
+
+def test_setup_destination_choice_and_protection(tmp_path):
+    async def exercise():
+        app = SetupWizard(tmp_path / "unused.toml")
+        repo = tmp_path / "topic"
+        async with app.run_test(size=(80, 30)) as pilot:
+            app.query_one("#destination_mode", Select).value = "scaffold"
+            app.query_one("#destination", Input).value = str(repo)
+            for field in ("name", "hn", "preferred", "demoted"):
+                app.query_one(f"#{field}", Input).value = VALUES[field]
+            for field in ("rss", "arxiv", "categories"):
+                app.query_one(f"#{field}", TextArea).load_text(VALUES[field])
+            await pilot.pause()
+            for _ in range(4):
+                await pilot.press("ctrl+n")
+                await pilot.pause()
+            assert app.scaffold == repo
+            app.query_one("#confirm", Checkbox).value = True
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+        assert (repo / ".github/workflows/digest.yml").exists()
+        before = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        app = SetupWizard(Path("config/feeds.toml"), repo)
+        async with app.run_test(size=(80, 30)) as pilot:
+            app.query_one("#name", Input).value = "Another digest"
+            app.query_one("#hn", Input).value = "another topic"
+            app.query_one("#categories", TextArea).load_text(VALUES["categories"])
+            for _ in range(4):
+                await pilot.press("ctrl+n")
+                await pilot.pause()
+            app.query_one("#confirm", Checkbox).value = True
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert "existing files" in str(app.query_one("#error").content)
+            await pilot.press("ctrl+q")
+        assert before == {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+
+    asyncio.run(exercise())
+
+
+def test_workspace_all_read_commands_and_copy(tmp_path, monkeypatch):
+    store, edition = frozen_store(tmp_path)
+    config = tmp_path / "feeds.toml"
+    before = {p: p.read_bytes() for p in store.rglob("*") if p.is_file()}
+    copied = []
+
+    async def exercise():
+        app = Workspace(store, config)
+        monkeypatch.setattr(app, "copy_to_clipboard", copied.append)
+        async with app.run_test(size=(100, 34)) as pilot:
+            prompt = app.query_one(Input)
+            commands = [
+                "/dates",
+                "/config",
+                "/categories",
+                "/show",
+                "/audit",
+                "/rerank",
+                "/history",
+                f"/inspect latest {edition['sections']['dv'][0]['id']}",
+                "/help show",
+            ]
+            for command in commands:
+                prompt.value = command
+                await pilot.pause()
+                await pilot.press("enter")
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+                assert not app.busy
+                assert prompt.value == ""
+                assert not any(block.plain.startswith("Error:") for block in app.query(OutputBlock))
+            prompt.value = "/copy"
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert copied and "Original frozen article links" in copied[-1]
+
+    asyncio.run(exercise())
+    assert before == {p: p.read_bytes() for p in store.rglob("*") if p.is_file()}

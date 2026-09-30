@@ -7,22 +7,23 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from rich.text import Text
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Checkbox, Footer, Header, Input, Select, Static, TextArea
 
 from .setup import configuration, save_configuration
+from .ui_style import SundryApp
 
 
-class SetupWizard(App[int]):
+class SetupWizard(SundryApp[int]):
     TITLE = "Sundry / setup"
     CSS = """
-    Screen { background: #10151c; }
+    Screen { background: $background; }
     #form { padding: 1 2; }
-    #heading { height: auto; color: #50d8bd; text-style: bold; }
+    #heading { height: auto; color: $primary; text-style: bold; }
     #hint, #error { height: auto; margin-bottom: 1; }
-    #error { color: #ff947d; }
+    #error { color: $error; }
     TextArea { height: 8; }
     #preview { height: 1fr; min-height: 8; }
     #buttons { height: 3; dock: bottom; }
@@ -35,8 +36,8 @@ class SetupWizard(App[int]):
     ]
     STEPS = ["Title", "Sources", "Categories", "Ranking", "Preview and save"]
 
-    def __init__(self, output: Path, scaffold: Path | None = None) -> None:
-        super().__init__()
+    def __init__(self, output: Path, scaffold: Path | None = None, *, color_enabled: bool = True) -> None:
+        super().__init__(color_enabled=color_enabled)
         self.output = output
         self.scaffold = scaffold
         self.step = 0
@@ -52,6 +53,17 @@ class SetupWizard(App[int]):
             yield Static("", id="hint", markup=False)
             yield Static("", id="error", markup=False)
             yield Input(placeholder="Digest title", id="name")
+            yield Select(
+                [("Topic configuration only", "config"), ("New topic repository with workflows", "scaffold")],
+                value="scaffold" if self.scaffold else "config",
+                allow_blank=False,
+                id="destination_mode",
+            )
+            yield Input(
+                value=str(self.scaffold or self.output),
+                placeholder="Output file or new repository directory",
+                id="destination",
+            )
             yield Select(
                 [("RSS / Atom", "rss"), ("arXiv", "arxiv"), ("Hacker News", "hn")],
                 value="rss",
@@ -88,6 +100,14 @@ class SetupWizard(App[int]):
         self.query_one(f"#{ids[self.step]}").focus()
 
     def _collect(self) -> None:
+        destination = self.query_one("#destination", Input).value.strip()
+        if not destination:
+            raise ValueError("Choose an output file or a new repository directory")
+        if self.query_one("#destination_mode", Select).value == "scaffold":
+            self.scaffold = Path(destination)
+        else:
+            self.scaffold = None
+            self.output = Path(destination)
         for key in ("name", "hn", "preferred", "demoted"):
             self.values[key] = self.query_one(f"#{key}", Input).value
         for key in ("rss", "arxiv", "categories"):
@@ -97,7 +117,7 @@ class SetupWizard(App[int]):
 
     def _show_step(self) -> None:
         groups = [
-            {"name"},
+            {"name", "destination_mode", "destination"},
             {"source_type", "rss", "arxiv", "hn"},
             {"categories"},
             {"ranking", "preferred", "demoted"},
@@ -114,7 +134,8 @@ class SetupWizard(App[int]):
             for key in ("preferred", "demoted"):
                 self.query_one(f"#{key}").display = custom
         hints = [
-            "Name your topic digest. Tab moves between controls; Enter activates buttons.",
+            "Name your topic digest and choose a destination. New topic repositories include scheduled workflows. "
+            "Tab moves between controls; Enter activates buttons.",
             "Switch source type to add several kinds. RSS/arXiv: one Name | URL or query per line. "
             "Hacker News: comma-separated searches. No sources are fetched during setup.",
             "One category per line: key | title | comma-separated keywords | required terms | excluded terms. "
@@ -134,8 +155,8 @@ class SetupWizard(App[int]):
             self._show_step()
 
     def action_next(self) -> None:
-        self._collect()
         try:
+            self._collect()
             if self.step == 0 and not self.values["name"].strip():
                 raise ValueError("Give your digest a title")
             if self.step == 3:
