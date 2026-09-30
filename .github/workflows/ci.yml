@@ -65,10 +65,18 @@ jobs:
         run: uv run mypy src
 
       - name: Pytest
-        run: uv run pytest -v --cov=sundry --cov-report=term-missing
+        run: uv run pytest -v --cov=sundry --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: error
 
   preview-digest:
-    name: Build & email a preview digest
+    name: Build preview artifacts and email
     needs: lint-and-test
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' }}
@@ -77,27 +85,32 @@ jobs:
 
       - uses: ./.github/actions/setup-python-env
 
-      - name: Build digest, and email a preview if mail secrets are set
-        # Dry run either way (no commit, no cache write) — --send-email is
-        # only added when MAIL_USERNAME/MAIL_PASSWORD are actually
-        # configured, so a fork PR without those secrets still builds and
-        # passes, just without a preview email.
+      - name: Build digest and email when credentials are configured
         env:
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          DIGEST_RECIPIENT: ${{ vars.DIGEST_RECIPIENT || 'bestasitis@gmail.com' }}
+          DIGEST_RECIPIENT: ${{ vars.DIGEST_RECIPIENT || secrets.DIGEST_RECIPIENT || 'bestasitis@gmail.com' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           SEND_ARGS=()
           if [ -n "$MAIL_USERNAME" ] && [ -n "$MAIL_PASSWORD" ]; then
-            SEND_ARGS=(--send-email --subject-prefix "[PR Preview] " --subject-suffix " — #${{ github.event.pull_request.number }}")
+            SEND_ARGS=(--send-email --subject-prefix "[PR Preview] " --subject-suffix " — #$PR_NUMBER")
           else
-            echo "::warning::MAIL_USERNAME/MAIL_PASSWORD secrets aren't set yet, so this PR can't " \
-                 "send a preview email. See README.md for setup steps; the digest still built " \
-                 "successfully above."
+            echo "::warning::Mail credentials unavailable; preview artifacts only."
           fi
           uv run python -m sundry \
             --config examples/feeds.toml \
             --html-output digest_output/latest.html \
+            --links-output digest_output/links.txt \
+            --report-output digest_output/report.json \
             --no-write-cache \
             --no-archive \
             "${SEND_ARGS[@]}"
+
+      - name: Upload preview and source diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: digest-preview
+          path: digest_output/
+          if-no-files-found: error

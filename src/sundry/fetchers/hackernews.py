@@ -15,17 +15,31 @@ logger = logging.getLogger(__name__)
 
 HN_ALGOLIA_SEARCH_URL = "https://hn.algolia.com/api/v1/search_by_date"
 MIN_POINTS = 3
-HITS_PER_QUERY = 6
+HITS_PER_QUERY = 100
 
 
-def fetch_hn_query(query: str, session: requests.Session) -> FetchOutcome:
+def fetch_hn_query(
+    query: str,
+    session: requests.Session,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> FetchOutcome:
     """Run one Hacker News search, keeping only stories with `MIN_POINTS`+."""
     source_name = f"Hacker News: {query!r}"
+    params = {"query": query, "tags": "story", "hitsPerPage": str(HITS_PER_QUERY)}
+    filters = []
+    if start:
+        filters.append(f"created_at_i>={int(start.timestamp())}")
+    if end:
+        filters.append(f"created_at_i<{int(end.timestamp())}")
+    if filters:
+        params["numericFilters"] = ",".join(filters)
     try:
         response = request_with_retries(
             session,
             HN_ALGOLIA_SEARCH_URL,
-            params={"query": query, "tags": "story", "hitsPerPage": str(HITS_PER_QUERY)},
+            params=params,
         )
         data = response.json()
     except (requests.RequestException, ValueError) as exc:
@@ -51,7 +65,9 @@ def fetch_hn_query(query: str, session: requests.Session) -> FetchOutcome:
                 published=_parse_created_at(hit.get("created_at")),
             )
         )
-    return FetchOutcome(source_name, articles=articles)
+    total = data.get("nbHits", len(data.get("hits", [])))
+    warning = "result cap reached; narrow the query or date window" if total > HITS_PER_QUERY else None
+    return FetchOutcome(source_name, articles=articles, error=warning)
 
 
 def _parse_created_at(created_at: str | None) -> datetime | None:

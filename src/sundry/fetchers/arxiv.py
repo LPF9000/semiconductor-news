@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import feedparser
 import requests
 
 from ..models import Article, ArxivSource
-from ..text import strip_html, truncate
+from ..text import strip_html
 from .common import FetchOutcome, entry_datetime, request_with_retries
 
 logger = logging.getLogger(__name__)
@@ -24,10 +25,21 @@ ARXIV_API_URL = "https://export.arxiv.org/api/query"
 COURTESY_DELAY_SECONDS = 3.0
 
 
-def fetch_arxiv(source: ArxivSource, session: requests.Session, *, delay: bool = True) -> FetchOutcome:
+def fetch_arxiv(
+    source: ArxivSource,
+    session: requests.Session,
+    *,
+    delay: bool = True,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> FetchOutcome:
     """Run one saved arXiv search, sorted newest-submitted-first."""
+    query = source.query
+    if start and end:
+        last_minute = end - timedelta(minutes=1)
+        query = f"({query}) AND submittedDate:[{start:%Y%m%d%H%M} TO {last_minute:%Y%m%d%H%M}]"
     url = (
-        f"{ARXIV_API_URL}?search_query={quote(source.query)}"
+        f"{ARXIV_API_URL}?search_query={quote(query)}"
         f"&sortBy=submittedDate&sortOrder=descending&max_results={source.max_results}"
     )
     try:
@@ -40,6 +52,8 @@ def fetch_arxiv(source: ArxivSource, session: requests.Session, *, delay: bool =
             time.sleep(COURTESY_DELAY_SECONDS)
 
     parsed = feedparser.parse(response.content)
+    if parsed.bozo and not parsed.entries:
+        return FetchOutcome(source.name, error="unparseable API response")
     articles = []
     for entry in parsed.entries:
         link = getattr(entry, "link", None)
@@ -54,9 +68,11 @@ def fetch_arxiv(source: ArxivSource, session: requests.Session, *, delay: bool =
             Article(
                 title=strip_html(title).replace("\n", " "),
                 link=link,
-                summary=truncate(summary),
+                summary=summary,
                 source=source.name,
                 published=entry_datetime(entry),
             )
         )
-    return FetchOutcome(source.name, articles=articles)
+    total = int(parsed.feed.get("opensearch_totalresults", len(articles)))
+    warning = f"result cap reached ({len(articles)}/{total}); increase max_results" if total > len(articles) else None
+    return FetchOutcome(source.name, articles=articles, error=warning)

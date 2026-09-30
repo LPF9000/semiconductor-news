@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .models import Article, Category
+from .text import truncate
 
 ARCHIVE_INDEX_HEADER = "# Digest archive\n\nOne file per day, newest first.\n"
 
@@ -61,14 +62,14 @@ def render_html(
                 f'<a href="{html.escape(article.link)}" style="font-size:14.5px;font-weight:600;'
                 f'color:#1d4ed8;text-decoration:none;">{html.escape(article.title)}</a><br>'
                 f'<span style="font-size:11.5px;color:#71717a;">{html.escape(_meta_line(article))}</span><br>'
-                f'<span style="font-size:13px;color:#3f3f46;">{html.escape(article.summary)}</span>'
+                f'<span style="font-size:13px;color:#3f3f46;">{html.escape(truncate(article.summary))}</span>'
                 "</div>"
             )
 
     if failures:
         parts.append(
             '<p style="margin-top:28px;font-size:11px;color:#a1a1aa;">'
-            f"Sources that couldn't be reached today: {html.escape('; '.join(failures))}</p>"
+            f"Source and selection warnings: {html.escape('; '.join(failures))}</p>"
         )
 
     parts.append(
@@ -103,11 +104,11 @@ def render_markdown(
         for article in items:
             lines.append(f"- **[{article.title}]({article.link})** — {_meta_line(article)}")
             if article.summary:
-                lines.append(f"  {article.summary}")
+                lines.append(f"  {truncate(article.summary)}")
         lines.append("")
 
     if failures:
-        lines.append(f"_Sources that couldn't be reached today: {'; '.join(failures)}_")
+        lines.append(f"_Source and selection warnings: {'; '.join(failures)}_")
         lines.append("")
 
     return "\n".join(lines)

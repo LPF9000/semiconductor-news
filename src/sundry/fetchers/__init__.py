@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 import requests
 
@@ -26,7 +27,13 @@ def _new_session() -> requests.Session:
     return session
 
 
-def fetch_all(config: DigestConfig, *, max_workers: int = DEFAULT_MAX_WORKERS) -> tuple[list[Article], list[str]]:
+def fetch_all(
+    config: DigestConfig,
+    *,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> tuple[list[Article], list[str]]:
     """Fetch every configured source and return (articles, failure descriptions).
 
     RSS feeds and Hacker News queries are independent, I/O-bound calls and
@@ -46,7 +53,7 @@ def fetch_all(config: DigestConfig, *, max_workers: int = DEFAULT_MAX_WORKERS) -
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [pool.submit(fetch_rss, source, session) for source in config.rss_sources]
-        futures += [pool.submit(fetch_hn_query, query, session) for query in config.hn_queries]
+        futures += [pool.submit(fetch_hn_query, query, session, start=start, end=end) for query in config.hn_queries]
         for future in as_completed(futures):
             try:
                 _collect(future.result())
@@ -55,6 +62,6 @@ def fetch_all(config: DigestConfig, *, max_workers: int = DEFAULT_MAX_WORKERS) -
                 failures.append("a source (unexpected error)")
 
     for source in config.arxiv_sources:
-        _collect(fetch_arxiv(source, session))
+        _collect(fetch_arxiv(source, session, start=start, end=end))
 
     return articles, failures
