@@ -88,7 +88,7 @@ jobs:
       # config/feeds.toml, digests/, and state/seen.json live.
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ inputs.python-version }}
           enable-cache: true

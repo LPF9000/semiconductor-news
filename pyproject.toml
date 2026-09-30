@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
   "feedparser>=6.0,<7",
-  "requests>=2.31,<3",
+  "requests>=2.34.2,<3",
 ]
 
 [project.urls]
@@ -25,7 +25,7 @@ dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "ruff>=0.16.5",
-  "mypy>=1.10",
+  "mypy>=2.3.1",
   "types-requests",
 ]
 
