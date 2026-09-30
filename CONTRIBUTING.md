@@ -26,7 +26,16 @@ Dependency management is [uv](https://docs.astral.sh/uv/).
 [Install it](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
-uv sync --extra dev
+uv sync --locked --extra dev
+```
+
+Run local commands with `uv run`; it handles the project environment, so
+manual activation is unnecessary. To view CLI help:
+
+```bash
+uv run sundry --help
+uv run sundry lab --help
+uv run sundry lab capture --help
 ```
 
 ## Before opening a PR

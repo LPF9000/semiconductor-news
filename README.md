@@ -326,8 +326,18 @@ uv run pytest --cov=sundry --cov-fail-under=80
 uv run sundry --help
 ```
 
-Use this repository's environment. Once installed, the same commands are
-available under `.venv/bin/`. Update and commit `uv.lock` when dependencies change.
+Use `uv run` for local commands; it handles the project environment without
+requiring `source .venv/bin/activate`. To explore the CLI and its subcommands:
+
+```bash
+uv run sundry --help
+uv run sundry lab --help
+uv run sundry lab capture --help
+```
+
+Manual activation and `.venv/bin/` commands also work, but `uv run` is the
+preferred approach in this checkout. Update and commit `uv.lock` when
+dependencies change.
 
 ## Repository layout
 

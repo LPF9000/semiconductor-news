@@ -218,8 +218,16 @@ research/sales source weights, CLI links, and offline candidate replay.
 
 ## Dev commands (this repo's own Python package)
 
+Prefer `uv run` for all local CLI and development commands in this checkout.
+It handles the project environment automatically; do not instruct users to
+activate `.venv` or default to `.venv/bin/sundry`. For a new topic repo,
+continue to use the `uvx` setup workflow above.
+
 ```bash
-uv sync --extra dev              # install
+uv sync --locked --extra dev     # install
+uv run sundry --help             # CLI help
+uv run sundry lab --help         # evaluation command help
+uv run sundry lab capture --help # subcommand help
 uv run ruff check .              # lint
 uv run ruff format .             # format
 uv run mypy src                  # type-check
