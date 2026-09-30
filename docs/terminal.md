@@ -98,16 +98,36 @@ uv run sundry setup --output config/my-topic-feeds.toml
 ```
 
 Setup asks one question at a time: title, creation mode, destination, RSS / Atom,
-arXiv, Hacker News, categories, and ranking. Enter accepts each answer and advances;
-Up/Down changes a selection. Ctrl+P goes back and retains your answers. There are
-no bottom navigation buttons. In feed/category editors, Shift+Enter adds a new
-line; Enter continues. Paste multiple lines freely. Each question includes a
-format explanation and examples; guidance scrolls in short terminals while the
-answer field and footer stay visible.
+arXiv, Hacker News, categories, and ranking. Enter accepts ordinary answers;
+Up/Down changes creation/ranking selections. Ctrl+P goes back and retains answers.
+There are no bottom navigation buttons. The repository suggestion comes from the
+title: `Robotics Research Digest` suggests `../robotics-research-digest`. An
+explicit or edited destination is preserved.
 
-Source types appear in sequence so you can combine them. Leave an unused source
-field blank; at least one source or query is required. RSS/Atom and arXiv use one
-`Name | URL or query` per line; Hacker News uses comma-separated queries.
+On RSS/Atom and arXiv screens, **Enter adds or toggles a source; Ctrl+N continues**.
+Tab moves between the checked list and custom entry. Space also toggles a list
+item. Shift+Enter inserts a line; paste multiple entries freely. Continuing adds
+any pending valid entries, so they are retained even without a separate Enter.
+Invalid batches leave the existing selections intact. Uncheck an item to exclude
+it from the config; repeated URLs/searches do not create duplicate entries.
+Instructions scroll in short terminals while the entry field and footer remain
+visible.
+
+RSS/Atom offers an optional catalogue of public feeds. Nothing is preselected,
+and catalogue choices do not set a topic or ranking policy. Enter a custom feed
+URL directly, or use `Name | URL` to give it a label; put multiple feeds on separate
+lines. The bundled catalogue lives in [feeds.toml](../sundry_catalog/feeds.toml),
+outside the engine's source tree, and ships with installed packages.
+
+arXiv accepts ordinary research phrases separated by commas or lines, such as
+`motion planning, robot learning`. It builds one exact-phrase search per entry,
+without requiring API syntax. Your title supplies an unchecked suggested search.
+The optional advanced mode accepts an existing query, with an optional
+`Name | query` label. See the [arXiv query reference](https://info.arxiv.org/help/api/user-manual.html#query_details)
+for advanced syntax. Hacker News uses comma-separated search phrases. At least
+one selected feed or search is required. Leave unused source types unselected and
+press Ctrl+N to skip them. Category editors use Shift+Enter for another line and
+Enter to continue.
 
 Categories use one line per category:
 

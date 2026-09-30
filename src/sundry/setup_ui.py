@@ -10,20 +10,28 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
-from textual.widgets import Footer, Input, Select, Static, TextArea
+from textual.widgets import Footer, Input, Select, SelectionList, Static, TextArea
 
 from .setup import configuration, save_configuration
+from .setup_sources import AnswerEditor, AnswerSubmitted, ContinueRequested, SourcePicker, repository_name
 from .ui_style import SundryApp
 
 
 class GuidedSelect(Select[str]):
     """Arrow keys choose inline; Enter accepts the current answer."""
 
-    BINDINGS = [("up", "previous_answer", "Previous answer"), ("down", "next_answer", "Next answer")]
+    BINDINGS = [
+        ("up", "previous_answer", "Previous answer"),
+        ("down", "next_answer", "Next answer"),
+        ("enter", "accept_answer", "Accept answer"),
+    ]
 
     def _choose(self, direction: int) -> None:
         answers = ["config", "scaffold"] if self.id == "destination_mode" else ["neutral", "custom"]
         self.value = answers[(answers.index(str(self.value)) + direction) % len(answers)]
+
+    def action_accept_answer(self) -> None:
+        self.post_message(AnswerSubmitted())
 
     def action_previous_answer(self) -> None:
         self._choose(-1)
@@ -37,7 +45,7 @@ class SetupWizard(SundryApp[int]):
     CSS = """
     Screen { background: $background; }
     #form { height: 1fr; padding: 0 2; }
-    #guidance { height: 1fr; min-height: 3; }
+    #guidance { height: 1fr; min-height: 2; }
     #heading { height: auto; color: $primary; text-style: bold; margin-bottom: 1; }
     #hint, #example, #error, #controls { height: auto; margin-bottom: 1; }
     #example { color: $secondary; border-left: solid $secondary; padding-left: 1; }
@@ -45,14 +53,15 @@ class SetupWizard(SundryApp[int]):
     #controls { color: $text-muted; }
     Input, Select { height: 3; }
     TextArea { height: 5; }
+    SourcePicker TextArea { height: 3; border: round $primary; }
     #preview { height: 1fr; min-height: 4; }
     """
     BINDINGS = [
-        Binding("enter", "next", "Continue", priority=True),
+        Binding("enter", "answer", "Add / Next"),
         Binding("ctrl+p", "previous_step", "Back", priority=True),
         Binding("ctrl+q", "cancel", "Cancel", priority=True),
-        Binding("shift+enter", "newline", "New line", priority=True, show=False),
-        Binding("ctrl+n", "next", "Continue", priority=True, show=False),
+        Binding("shift+enter", "newline", "New line", show=False),
+        Binding("ctrl+n", "next", "Continue"),
     ]
     FIELDS = [
         "name",
@@ -77,6 +86,8 @@ class SetupWizard(SundryApp[int]):
         self.values: dict[str, str] = {}
         self.preview = ""
         self.next_steps = ""
+        self.suggested_destination = str(scaffold or output)
+        self.automatic_destination = False
 
     @property
     def field(self) -> str:
@@ -88,7 +99,7 @@ class SetupWizard(SundryApp[int]):
             with VerticalScroll(id="guidance"):
                 yield Static(id="hint", markup=False)
                 yield Static(id="example", markup=False)
-            yield Static(id="error", markup=False)
+                yield Static(id="error", markup=False)
             yield Input(placeholder="Name your digest", id="name")
             yield GuidedSelect(
                 [("Topic configuration only", "config"), ("New topic repository with workflows", "scaffold")],
@@ -97,10 +108,10 @@ class SetupWizard(SundryApp[int]):
                 id="destination_mode",
             )
             yield Input(value=str(self.scaffold or self.output), id="destination")
-            yield TextArea(id="rss")
-            yield TextArea(id="arxiv")
+            yield SourcePicker("rss")
+            yield SourcePicker("arxiv")
             yield Input(placeholder="Leave blank to skip", id="hn")
-            yield TextArea(id="categories")
+            yield AnswerEditor(id="categories")
             yield GuidedSelect(
                 [("Neutral ranking", "neutral"), ("Custom term preferences", "custom")],
                 value="neutral",
@@ -109,7 +120,7 @@ class SetupWizard(SundryApp[int]):
             )
             yield Input(placeholder="Leave blank for no preference", id="preferred")
             yield Input(placeholder="Leave blank for no penalty", id="demoted")
-            yield TextArea(read_only=True, id="preview")
+            yield AnswerEditor(read_only=True, id="preview")
             yield Input(placeholder="Type CREATE to save, then press Enter", id="confirm")
             yield Static(id="controls", markup=False)
         yield Footer()
@@ -118,21 +129,26 @@ class SetupWizard(SundryApp[int]):
         self._show_step()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        return not (action == "next" and any(select.expanded for select in self.query(Select)))
+        if action == "next" and self.field not in {"rss", "arxiv"}:
+            return None
+        return not (action in {"next", "answer"} and any(select.expanded for select in self.query(Select)))
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "destination_mode" and self.field == "destination_mode":
             destination = self.query_one("#destination", Input)
             if event.value == "scaffold" and destination.value == str(self.output):
-                destination.value = "../my-topic-digest"
-            elif event.value == "config" and destination.value == "../my-topic-digest":
+                destination.value = "../" + repository_name(self.query_one("#name", Input).value)
+                self.suggested_destination = destination.value
+                self.automatic_destination = True
+            elif event.value == "config" and destination.value == self.suggested_destination:
                 destination.value = str(self.output)
 
     def _collect(self) -> None:
         for key in ("name", "hn", "preferred", "demoted"):
             self.values[key] = self.query_one(f"#{key}", Input).value
-        for key in ("rss", "arxiv", "categories"):
-            self.values[key] = self.query_one(f"#{key}", TextArea).text
+        for key in ("rss", "arxiv"):
+            self.values[key] = self.query_one(f"#{key}", SourcePicker).text
+        self.values["categories"] = self.query_one("#categories", TextArea).text
         if self.query_one("#ranking", Select).value == "neutral":
             self.values["preferred"] = self.values["demoted"] = ""
 
@@ -153,18 +169,21 @@ class SetupWizard(SundryApp[int]):
             "destination": (
                 "Choose a new repository directory" if scaffold else "Choose your configuration file",
                 "Enter the path where these files should be created. Existing files are protected.",
-                "Example: ../my-topic-digest" if scaffold else "Example: config/feeds.toml",
+                f"Suggested: ../{repository_name(self.query_one('#name', Input).value)}"
+                if scaffold
+                else "Example: config/feeds.toml",
             ),
             "rss": (
-                "Add RSS / Atom feeds",
-                "One feed per line: name | full feed URL.\nUse an RSS / Atom feed address. Leave blank to skip.",
-                "Example (placeholder URL):\nResearch | https://example.org/feed.xml",
+                "Choose RSS / Atom feeds",
+                "Check any suggested feeds you want. Tab moves to custom entry.\n"
+                "Add a feed URL, or paste several on separate lines. Nothing is selected automatically.",
+                "Custom: https://example.org/feed.xml\nOptional name: Research | https://example.org/feed.xml",
             ),
             "arxiv": (
-                "Add arXiv searches",
-                "Enter one search per line: a name, a | separator, then an arXiv API query.\n"
-                "Leave blank to skip. RSS / Atom feeds entered earlier are retained.",
-                'Format: Search name | query\nExample: Robotics papers | cat:cs.RO AND abs:"motion planning"',
+                "Find research papers",
+                "arXiv is a free collection of research papers. Check your topic, or enter search phrases.\n"
+                "Separate phrases with commas or new lines. The search query is built for you.",
+                "Example: motion planning, robot learning\nAdvanced mode can reuse an existing saved search.",
             ),
             "hn": (
                 "Add Hacker News searches",
@@ -216,16 +235,25 @@ class SetupWizard(SundryApp[int]):
         self.query_one("#error").display = False
         for key in self.FIELDS:
             self.query_one(f"#{key}").display = key == field
-        multiline = field in {"rss", "arxiv", "categories"}
+        multiline = field == "categories"
         controls = ""
-        if multiline:
+        if field in {"rss", "arxiv"}:
+            controls = "Enter add/toggle / Ctrl+N continue\nTab list/input; Shift+Enter new line."
+        elif multiline:
             controls = "Shift+Enter adds a line; Enter continues."
         elif field in {"destination_mode", "ranking"}:
             controls = "Up/Down chooses an answer; Enter accepts it."
         self.query_one("#controls", Static).update(controls)
         self.query_one("#controls").display = bool(controls)
         self.query_one("#guidance", VerticalScroll).scroll_home(animate=False)
-        self.query_one(f"#{field}").focus()
+        if field in {"rss", "arxiv"}:
+            picker = self.query_one(f"#{field}", SourcePicker)
+            choices = picker.query_one(SelectionList)
+            if choices.highlighted is None and choices.option_count:
+                choices.highlighted = 0
+            choices.focus()
+        else:
+            self.query_one(f"#{field}").focus()
 
     def _destinations(self) -> str:
         if self.scaffold:
@@ -249,6 +277,8 @@ class SetupWizard(SundryApp[int]):
             destination = self.query_one("#destination", Input).value.strip()
             if not destination:
                 raise ValueError("Enter an output file or a new repository directory")
+            if destination != self.suggested_destination:
+                self.automatic_destination = False
             if self.query_one("#destination_mode", Select).value == "scaffold":
                 self.scaffold = Path(destination).expanduser()
             else:
@@ -267,14 +297,46 @@ class SetupWizard(SundryApp[int]):
             self.query_one("#preview", TextArea).load_text(self.preview)
             self.query_one("#confirm", Input).value = ""
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.action_answer()
+
+    def on_answer_submitted(self, event: AnswerSubmitted) -> None:
+        self.action_answer()
+
+    def on_continue_requested(self, event: ContinueRequested) -> None:
+        self.action_next()
+
+    def action_answer(self) -> None:
+        if self.field in {"rss", "arxiv"}:
+            try:
+                self.query_one(f"#{self.field}", SourcePicker).accept()
+                self.query_one("#error").display = False
+            except ValueError as exc:
+                self.query_one("#error").display = True
+                self.query_one("#error", Static).update(Text(str(exc)))
+        else:
+            self.action_next()
+
     def action_next(self) -> None:
         try:
+            if self.field in {"rss", "arxiv"}:
+                self.query_one(f"#{self.field}", SourcePicker).add_pending()
             self._validate_answer()
             if self.field == "confirm":
                 if self.query_one("#confirm", Input).value.strip() != "CREATE":
                     raise ValueError("Type CREATE to confirm creating the listed files")
                 self._save()
                 return
+            if self.field == "name":
+                destination = self.query_one("#destination", Input)
+                if (
+                    self.automatic_destination
+                    and destination.value.startswith("../")
+                    and destination.value == self.suggested_destination
+                ):
+                    destination.value = "../" + repository_name(self.values["name"])
+                    self.suggested_destination = destination.value
+                self.query_one("#arxiv", SourcePicker).suggest_topic(self.values["name"])
             self.step += 1
             if self.field == "preferred" and self.query_one("#ranking", Select).value == "neutral":
                 self.step = self.FIELDS.index("preview")

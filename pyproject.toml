@@ -42,7 +42,11 @@ terminal = ["rich>=14,<15", "textual>=6,<9"]
 default-groups = ["terminal"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["sundry", "sundry.*", "sundry_catalog"]
+
+[tool.setuptools.package-data]
+sundry_catalog = ["feeds.toml"]
 
 [tool.ruff]
 line-length = 120

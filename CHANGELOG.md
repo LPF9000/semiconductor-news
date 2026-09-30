@@ -5,6 +5,9 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Suggest repository names from the topic title; add checked source pickers with
+  custom/batch feed entry and plain-language arXiv search construction.
+
 - Guide interactive setup one answer at a time with Enter/Back controls, source
   and category examples, visible editors in short terminals and typed confirmation.
 

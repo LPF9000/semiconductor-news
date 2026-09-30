@@ -222,7 +222,10 @@ The optional Textual interface has two separate modes: `sundry workspace` for
 interactive research/evaluation commands, and `sundry setup` for local guided
 configuration. Setup must run in a topic repository or at an explicit new output
 path, with preview and confirmation before writes. Protect existing configs and
-retain the noninteractive `init`, plain CLI and JSON paths. UI dependencies remain optional for installed packages; the checkout defaults
+retain the noninteractive `init`, plain CLI and JSON paths. Optional setup feed
+choices live in `sundry_catalog/feeds.toml`, outside `src/`, and are never
+preselected. Plain arXiv phrases build deterministic queries; advanced queries
+remain available. Enter adds/toggles source entries; Ctrl+N advances source lists. UI dependencies remain optional for installed packages; the checkout defaults
 to the terminal dependency group. Bare `uv run sundry` in a terminal launches
 setup for a missing config, then the workspace. Use `sundry build` for an explicit
 batch run; invocations with build flags and pipes retain batch behavior. See docs/terminal.md and docs/editorial-audit.md.
