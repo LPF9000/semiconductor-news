@@ -61,7 +61,13 @@ uvx --from "sundry[ui] @ git+https://github.com/LPF9000/sundry.git@main" sundry 
 The wizard asks one question at a time, with examples: Enter continues, Ctrl+P
 goes back, and Shift+Enter adds a line. On source screens, Enter adds/checks an
 item and Ctrl+N continues. Feeds have selectable suggestions and custom URL
-entry; arXiv accepts plain search phrases. It collects
+entry; arXiv accepts plain search phrases. Hacker News offers those phrases as
+independent selectable choices and accepts comma- or newline-separated additions.
+Topic sections use a title and matching phrases, with automatic internal keys;
+Enter adds a section and Ctrl+N continues. An advanced row editor is also available.
+Preferred and demoted ranking phrases use the same checked lists: Enter adds individual or
+comma/newline-separated phrases, and Ctrl+N continues.
+It collects
 sources, categories and ranking preferences, validates a
 TOML preview, and asks you to confirm before creating files. Existing files are
 protected. See [terminal setup](./docs/terminal.md#guided-setup).
@@ -269,12 +275,20 @@ In this checkout, start the Textual interface directly:
 uv run sundry
 ```
 
-With no topic config, this opens guided setup. Choose a config file or a new
+The initial menu offers New, Refine existing config, or Research workspace.
+New opens guided setup. Choose a config file or a new
 empty topic repository with scheduled workflows, review the preview, and confirm
 the files by typing `CREATE`. Setup asks one question at a time with examples;
 Enter accepts answers, Ctrl+P goes back, and Ctrl+N advances source lists.
 Repository names follow the title; source pickers accept suggested or custom
-feeds, and arXiv accepts plain research phrases. Setup then opens the research workspace. Existing files are protected.
+feeds, and arXiv accepts plain research phrases. Hacker News reuses those phrases
+as optional choices and accepts additional searches. Topic organization guides
+you through section titles and matching phrases; Enter adds, Ctrl+N continues.
+Setup then opens the research workspace. Existing files are protected during
+creation. Refinement loads current entries, provides a section menu and a
+diff before a confirmed SAVE. F2 edits and Ctrl+D deletes list entries; Ctrl+G
+returns to sections. Advanced settings and comments are retained. To reopen a
+config directly, run `uv run sundry setup --edit config/feeds.toml`.
 Local `uv run` installs the terminal dependencies automatically; installed engine
 packages still offer them through the optional `ui` extra.
 

@@ -5,6 +5,19 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Add New/Refine/Workspace startup choices, section navigation and list edit/delete
+  controls. Refine existing TOML with preserved comments/settings, diff review,
+  typed SAVE confirmation and atomic replacement with external-change protection.
+- Keep browser filters/details and confirmation controls usable in short terminals;
+  document the full interactive usability audit.
+
+- Show preferred and demoted ranking phrases in checked setup lists; Enter adds individual
+  or comma/newline-separated phrases and Ctrl+N continues.
+
+- Enlarge setup source lists, reuse arXiv phrases as independent Hacker News
+  choices with batch entry, and guide topic sections through titles and matching
+  phrases with automatic keys and optional advanced rows.
+
 - Suggest repository names from the topic title; add checked source pickers with
   custom/batch feed entry and plain-language arXiv search construction.
 

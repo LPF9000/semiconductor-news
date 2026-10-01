@@ -10,6 +10,7 @@ from textual.widgets import Button, Footer, Input, Select, TextArea
 from sundry.cli import main
 from sundry.config import load_config
 from sundry.setup import configuration, save_configuration
+from sundry.setup_categories import CategoryPicker
 from sundry.setup_sources import SourcePicker
 from sundry.setup_ui import SetupWizard
 from sundry.workspace import execute, parse_command
@@ -64,18 +65,19 @@ def test_setup_validation(field, value):
 
 
 def fill_setup(app):
-    for field in ("name", "hn", "preferred", "demoted"):
-        app.query_one(f"#{field}", Input).value = VALUES[field]
-    for field in ("rss", "arxiv"):
+    app.query_one("#name", Input).value = VALUES["name"]
+    for field in ("rss", "arxiv", "hn", "preferred", "demoted"):
         app.query_one(f"#{field}", SourcePicker).load_text(VALUES[field])
-    app.query_one("#categories", TextArea).load_text(VALUES["categories"])
+    app.query_one("#categories", CategoryPicker).load_text(VALUES["categories"])
 
 
 async def advance_setup(app, pilot, target):
     for _ in range(15):
         if app.field == target:
             return
-        await pilot.press("ctrl+n" if app.field in {"rss", "arxiv"} else "enter")
+        await pilot.press(
+            "ctrl+n" if app.field in {"rss", "arxiv", "hn", "preferred", "demoted", "categories"} else "enter"
+        )
         await pilot.pause()
     raise AssertionError(f"Did not reach {target}: {app.field}")
 
@@ -106,7 +108,7 @@ def test_setup_cancel_confirm_navigation_and_scaffold(tmp_path):
             await pilot.press("ctrl+p")
             await pilot.pause()
             assert app.field == "demoted"
-            assert app.query_one("#preferred", Input).value == VALUES["preferred"]
+            assert app.query_one("#preferred", SourcePicker).text == VALUES["preferred"]
             await advance_setup(app, pilot, "confirm")
             await pilot.resize_terminal(60, 24)
             app.query_one("#confirm", Input).value = "CREATE"
@@ -347,12 +349,14 @@ def test_guided_setup_fields_examples_and_multiline(tmp_path, size):
             await pilot.press("ctrl+n")
             await pilot.pause()
             assert app.field == "hn"
-            await pilot.press("enter")
+            await pilot.press("ctrl+n")
             await pilot.pause()
             assert app.field == "categories"
             assert "comma-separated keywords" in str(app.query_one("#hint").content)
-            app.query_one("#categories", TextArea).load_text(VALUES["categories"])
-            await pilot.press("enter")
+            app.query_one("#category-title", Input).value = ""
+            app.query_one("#category-keywords", TextArea).load_text("")
+            app.query_one("#categories", CategoryPicker).load_text(VALUES["categories"])
+            await pilot.press("ctrl+n")
             await pilot.pause()
             assert app.field == "ranking"
             await pilot.press("enter")
@@ -513,5 +517,228 @@ def test_custom_destination_is_preserved(tmp_path):
             await pilot.press("enter")
             assert app.query_one("#destination", Input).value == "../custom-directory"
             await pilot.press("ctrl+q")
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("size", [(100, 35), (80, 24), (50, 18)])
+def test_phrase_lists_and_guided_sections(tmp_path, size):
+    from textual.widgets import SelectionList
+
+    async def exercise():
+        output = tmp_path / "feeds.toml"
+        app = SetupWizard(output)
+        async with app.run_test(size=size) as pilot:
+            app.query_one("#name", Input).value = "Robotics Digest"
+            await pilot.press("enter", "enter", "enter", "ctrl+n")
+            await pilot.pause()
+            assert app.field == "arxiv"
+            papers = app.query_one("#arxiv", SourcePicker)
+            papers.query_one(TextArea).focus()
+            papers.query_one(TextArea).load_text("motion planning, robot learning\ncontrol theory")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert papers.query_one(SelectionList).content_size.height >= 3
+            assert papers.region.bottom <= app.query_one(Footer).region.y
+            papers.query_one(Select).value = "advanced"
+            papers.query_one(TextArea).load_text("Not a phrase | cat:cs.RO")
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert app.field == "hn"
+            news = app.query_one("#hn", SourcePicker)
+            choices = news.query_one(SelectionList)
+            assert list(news.entries) == ["motion planning", "robot learning", "control theory"]
+            assert not choices.selected
+            await pilot.press("enter")  # Select first offered phrase.
+            news.query_one(TextArea).focus()
+            news.query_one(TextArea).load_text("open hardware, motion planning\nrobot kits")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert news.text.splitlines() == ["motion planning", "open hardware", "robot kits"]
+            assert choices.content_size.height >= 3
+            assert app.query_one("#controls").region.bottom <= app.query_one(Footer).region.y
+            choices.deselect("motion planning")
+            await pilot.press("ctrl+p", "ctrl+n")
+            await pilot.pause()
+            assert choices.selected == ["open hardware", "robot kits"]
+            news.query_one(TextArea).focus()
+            news.query_one(TextArea).load_text("".join(f"search {i}\n" for i in range(15)))
+            await pilot.press("enter")
+            choices.focus()
+            await pilot.press(*(["down"] * 18))
+            await pilot.pause()
+            assert choices.scroll_y > 0
+            choices.deselect_all()
+            choices.select("open hardware")
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert app.field == "categories"
+            categories = app.query_one("#categories", CategoryPicker)
+            assert app.query_one("#category-title", Input).value == "Robotics"
+            assert "motion planning" in app.query_one("#category-keywords", TextArea).text
+            await pilot.press("enter")  # Accept suggested title, then matching phrases.
+            assert app.focused is app.query_one("#category-keywords")
+            app.query_one("#category-keywords", TextArea).load_text("robotics, motion planning\nrobot learning")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "categories"
+            assert "robotics | Robotics | robotics, motion planning, robot learning" in categories.text
+            app.query_one("#category-title", Input).value = "Robot Learning"
+            await pilot.press("enter")
+            app.query_one("#category-keywords", TextArea).load_text("reinforcement learning, imitation learning")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert len(categories.query_one(SelectionList).selected) == 2
+            assert categories.query_one(SelectionList).content_size.height >= 3
+            assert categories.region.bottom <= app.query_one(Footer).region.y
+            await pilot.press("ctrl+p", "ctrl+n")
+            await pilot.pause()
+            assert len(categories.query_one(SelectionList).selected) == 2
+            await pilot.press("ctrl+n", "enter", "enter")
+            await pilot.pause()
+            assert app.field == "confirm"
+            app.query_one("#confirm", Input).value = "CREATE"
+            await pilot.press("enter")
+        config = load_config(output)
+        assert config.hn_queries == ("open hardware",)
+        assert [category.key for category in config.categories] == ["robotics", "robot_learning", "general"]
+        assert config.categories[0].keywords == ("robotics", "motion planning", "robot learning")
+
+    asyncio.run(exercise())
+
+
+def test_guided_section_validation_and_advanced_preservation(tmp_path):
+    from textual.widgets import SelectionList
+
+    async def exercise():
+        app = SetupWizard(tmp_path / "feeds.toml")
+        async with app.run_test() as pilot:
+            fill_setup(app)
+            await advance_setup(app, pilot, "categories")
+            categories = app.query_one("#categories", CategoryPicker)
+            title = app.query_one("#category-title", Input)
+            terms = app.query_one("#category-keywords", TextArea)
+            title.value = "Topic"
+            await pilot.press("enter")
+            terms.load_text(",\n,")
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert app.field == "categories"
+            assert "matching phrase" in str(app.query_one("#error").content)
+            assert len(categories.entries) == 2
+            terms.load_text("updated phrase")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert categories.entries["topic"] == ("topic", "Topic", "updated phrase", "hardware", "insurance")
+            for name in ("General", "123 Research", "Robot-Learning", "Robot Learning"):
+                title.value = name
+                title.focus()
+                await pilot.press("enter")
+                terms.load_text("matching phrase")
+                await pilot.press("enter")
+                await pilot.pause()
+            assert {"section_general", "section_123_research", "robot_learning", "robot_learning_2"} <= set(
+                categories.entries
+            )
+            title.focus()
+            await pilot.press("ctrl+e")
+            await pilot.pause()
+            assert categories.advanced
+            advanced = app.query_one("#category-advanced", TextArea)
+            advanced.load_text("valid | Valid | phrase\ngeneral | Invalid | phrase")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert "valid" not in categories.entries  # Whole invalid batch is rejected.
+            advanced.load_text("valid | Valid | phrase | context | sales")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert categories.entries["valid"][3:] == ("context", "sales")
+            choices = categories.query_one(SelectionList)
+            choices.deselect_all()
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert app.field == "categories"
+            assert "at least one section" in str(app.query_one("#error").content)
+            choices.select("valid")
+            await pilot.press("ctrl+n")
+            assert app.field == "ranking"
+            await pilot.press("ctrl+q")
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("size", [(80, 24), (50, 18)])
+def test_ranking_phrase_list_entry_selection_and_preview(tmp_path, size):
+    import tomllib
+
+    from textual.widgets import SelectionList
+
+    async def exercise():
+        app = SetupWizard(tmp_path / "feeds.toml")
+        async with app.run_test(size=size) as pilot:
+            fill_setup(app)
+            preferences = app.query_one("#preferred", SourcePicker)
+            preferences.query_one(SelectionList).deselect_all()
+            app.query_one("#ranking", Select).value = "custom"
+            await advance_setup(app, pilot, "preferred")
+            editor = preferences.query_one(TextArea)
+            editor.focus()
+            editor.load_text("open source")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.field == "preferred"
+            assert preferences.text == "open source"
+            assert editor.text == ""
+            editor.load_text("reproducible research, open source\nbenchmarks")
+            await pilot.press("enter")
+            await pilot.pause()
+            choices = preferences.query_one(SelectionList)
+            assert choices.selected == ["open source", "reproducible research", "benchmarks"]
+            assert choices.content_size.height >= 3
+            assert preferences.region.bottom <= app.query_one(Footer).region.y
+            choices.focus()
+            choices.highlighted = 1  # Omit open source through keyboard interaction.
+            await pilot.press("enter")
+            assert "open source" not in choices.selected
+            await pilot.press("ctrl+p", "enter")
+            await pilot.pause()
+            assert app.field == "preferred"
+            assert choices.selected == ["reproducible research", "benchmarks"]
+            editor.focus()
+            editor.load_text("public datasets")
+            await pilot.press("ctrl+n")
+            await pilot.pause()
+            assert app.field == "demoted"
+            assert "public datasets" in preferences.text
+            penalties = app.query_one("#demoted", SourcePicker)
+            penalties.query_one(TextArea).focus()
+            penalties.query_one(TextArea).load_text("sponsored")
+            await pilot.press("enter")
+            assert app.field == "demoted"
+            penalties.query_one(TextArea).load_text("buy now, sponsored\npromotions")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert penalties.query_one(SelectionList).selected == ["buy now", "sponsored", "promotions"]
+            penalties.query_one(SelectionList).deselect("buy now")
+            assert penalties.region.bottom <= app.query_one(Footer).region.y
+            await pilot.press("ctrl+p", "ctrl+n")
+            await pilot.pause()
+            assert penalties.query_one(SelectionList).selected == ["sponsored", "promotions"]
+            await pilot.press("ctrl+n")
+            assert app.field == "preview"
+            assert tomllib.loads(app.preview)["ranking"]["preferred_keywords"] == [
+                "reproducible research",
+                "benchmarks",
+                "public datasets",
+            ]
+            assert tomllib.loads(app.preview)["ranking"]["demoted_keywords"] == ["sponsored", "promotions"]
+            await pilot.press("ctrl+p", "ctrl+p")
+            await pilot.pause()
+            assert app.field == "preferred"
+            choices.deselect_all()
+            await pilot.press("ctrl+n", "ctrl+n")
+            assert tomllib.loads(app.preview)["ranking"]["preferred_keywords"] == []
+            await pilot.press("ctrl+q")
+        assert not (tmp_path / "feeds.toml").exists()
 
     asyncio.run(exercise())

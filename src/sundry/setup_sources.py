@@ -60,7 +60,8 @@ def source_rows(kind: str, text: str, *, advanced: bool = False) -> list[tuple[s
         else:
             for phrase in line.split(","):
                 if phrase.strip():
-                    rows.append((" ".join(phrase.split()), phrase_query(phrase)))
+                    name = " ".join(phrase.split())
+                    rows.append((name, name if kind in {"hn", "preferred", "demoted"} else phrase_query(phrase)))
     return rows
 
 
@@ -75,6 +76,26 @@ class AnswerSubmitted(Message):
 
 class ContinueRequested(Message):
     """Continue after the source editor has consumed pending text."""
+
+
+class EntryAction(Message):
+    def __init__(self, action: str, value: str) -> None:
+        super().__init__()
+        self.action = action
+        self.value = value
+
+
+class EntryList(SelectionList[str]):
+    """List-local edit/delete keys leave ordinary text editing intact."""
+
+    BINDINGS = [
+        Binding("ctrl+d", "entry_action('delete')", "Delete entry", priority=True, show=False),
+        Binding("f2", "entry_action('edit')", "Edit entry", priority=True, show=False),
+    ]
+
+    def action_entry_action(self, action: str) -> None:
+        if self.highlighted is not None:
+            self.post_message(EntryAction(action, self.get_option_at_index(self.highlighted).value))
 
 
 class AnswerEditor(TextArea):
@@ -110,17 +131,22 @@ class SourcePicker(Vertical):
     """Select suggestions or add custom entries; deselect to remove from the config."""
 
     DEFAULT_CSS = """
-    SourcePicker { height: auto; }
-    SourcePicker SelectionList { height: 5; border: round $secondary; }
+    SourcePicker { height: 1fr; min-height: 8; }
+    SourcePicker SelectionList { height: 1fr; min-height: 5; border: round $secondary; }
     SourcePicker TextArea { height: 3; }
     SourcePicker Select { height: 3; }
-    SourcePicker.arxiv SelectionList { height: 3; }
+    SourcePicker.arxiv { min-height: 11; }
     """
 
     def __init__(self, kind: str) -> None:
         super().__init__(id=kind, classes=kind)
         self.kind = kind
         self.entries: dict[str, tuple[str, str]] = {}
+        self.phrases: dict[str, str] = {}
+        self.suggested_phrases: dict[str, str] = {}
+        self.editing_key: str | None = None
+        self.origins: dict[str, str] = {}
+        self.deleted: set[str] = set()
 
     def compose(self) -> ComposeResult:
         if self.kind == "arxiv":
@@ -130,21 +156,28 @@ class SourcePicker(Vertical):
                 allow_blank=False,
                 id="arxiv-mode",
             )
-        choices: SelectionList[str] = SelectionList(id=f"{self.kind}-choices")
+        choices = EntryList(id=f"{self.kind}-choices")
         choices.border_title = "Available sources / 0 selected"
         yield choices
         yield AnswerEditor(id=f"{self.kind}-entry")
 
     def on_mount(self) -> None:
         self.query_one(TextArea).border_title = (
-            "Custom feed URLs / Enter adds" if self.kind == "rss" else "Search phrases / Enter adds"
+            "Custom feed URLs / Enter adds"
+            if self.kind == "rss"
+            else f"Add {self.kind} phrases / Enter adds"
+            if self.kind in {"preferred", "demoted"}
+            else "Search phrases / Enter adds"
         )
         if self.kind == "rss":
             self._add(feed_choices(), selected=False)
+        self._caption()
 
     @property
     def text(self) -> str:
         choices = self.query_one(SelectionList)
+        if self.kind in {"hn", "preferred", "demoted"}:
+            return "\n".join(choices.selected)
         return "\n".join(f"{self.entries[key][0]} | {self.entries[key][1]}" for key in choices.selected)
 
     def _add(self, rows: list[tuple[str, str]], *, selected: bool = True) -> None:
@@ -154,6 +187,10 @@ class SourcePicker(Vertical):
                 self.entries[value] = (name, value)
                 choices.add_option((Text(name), value, selected))
             elif selected:
+                if self.entries[value][0] != name:
+                    self.entries[value] = (name, value)
+                    index = list(self.entries).index(value)
+                    choices.replace_option_prompt_at_index(index, Text(name))
                 choices.select(value)
         self._caption()
 
@@ -165,16 +202,73 @@ class SourcePicker(Vertical):
 
     def suggest_topic(self, title: str) -> None:
         phrase = topic_name(title)
-        if phrase:
+        if phrase and phrase_query(phrase) not in self.deleted:
             self._add([(phrase, phrase_query(phrase))], selected=False)
+            self.suggested_phrases[phrase_query(phrase)] = phrase
+
+    def suggest_phrases(self, phrases: list[str]) -> None:
+        """Offer prior plain phrases without changing independent selections."""
+        self._add([(phrase, phrase) for phrase in phrases if phrase not in self.deleted], selected=False)
+
+    @property
+    def entered_phrases(self) -> list[str]:
+        """Plain entries and checked title suggestions, never saved API queries."""
+        selected = self.query_one(SelectionList).selected
+        return list(
+            dict.fromkeys(
+                [*self.phrases.values(), *(name for key, name in self.suggested_phrases.items() if key in selected)]
+            )
+        )
 
     def add_pending(self) -> None:
         editor = self.query_one(TextArea)
         advanced = self.kind == "arxiv" and self.query_one(Select).value == "advanced"
         rows = source_rows(self.kind, editor.text, advanced=advanced)
         if rows:
+            if self.editing_key is not None:
+                if len(rows) != 1:
+                    raise ValueError("Edit one entry at a time; clear the editor to cancel editing")
+                old = self.editing_key
+                if rows[0][1] != old and rows[0][1] in self.entries:
+                    raise ValueError("That entry already exists; edit it or remove the duplicate first")
+                self.origins[rows[0][1]] = self.origins.get(old, old)
+                if rows[0][1] != old:
+                    self._delete(old)
+                self.editing_key = None
             self._add(rows)
+            self.deleted.difference_update(value for _, value in rows)
+            if self.kind == "arxiv" and not advanced:
+                self.phrases.update({value: name for name, value in rows})
             editor.load_text("")
+        elif not editor.text.strip():
+            self.editing_key = None
+
+    def _delete(self, key: str) -> None:
+        choices = self.query_one(SelectionList)
+        index = list(self.entries).index(key)
+        choices.remove_option_at_index(index)
+        del self.entries[key]
+        self.phrases.pop(key, None)
+        self.suggested_phrases.pop(key, None)
+        self.deleted.add(key)
+        if self.editing_key == key:
+            self.editing_key = None
+            self.query_one(TextArea).load_text("")
+        self._caption()
+
+    def on_entry_action(self, event: EntryAction) -> None:
+        event.stop()
+        if event.action == "delete":
+            self._delete(event.value)
+        else:
+            name, value = self.entries[event.value]
+            self.editing_key = event.value
+            if self.kind == "arxiv":
+                self.query_one(Select).value = "advanced"
+            text = f"{name} | {value}" if self.kind in {"rss", "arxiv"} else value
+            editor = self.query_one(TextArea)
+            editor.load_text(text)
+            editor.focus()
 
     def accept(self) -> None:
         if isinstance(self.app.focused, SelectionList):
@@ -196,4 +290,5 @@ class SourcePicker(Vertical):
 
     def _caption(self) -> None:
         choices = self.query_one(SelectionList)
-        choices.border_title = f"Available sources / {len(choices.selected)} selected"
+        label = f"{self.kind.capitalize()} phrases" if self.kind in {"preferred", "demoted"} else "Available sources"
+        choices.border_title = f"{label} / {len(choices.selected)} selected"

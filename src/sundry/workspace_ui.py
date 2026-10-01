@@ -62,7 +62,9 @@ class Transcript(VerticalScroll):
 class ConfirmCommand(ModalScreen[bool]):
     CSS = """
     ConfirmCommand { align: center middle; }
-    #confirmation { width: 90%; max-width: 70; height: auto; padding: 1 2; border: round $primary; }
+    #confirmation { width: 90%; max-width: 70; height: 90%; max-height: 18; min-height: 8;
+                    padding: 1 2; border: round $primary; }
+    #confirm-body { height: 1fr; }
     #confirmation Static { height: auto; margin-bottom: 1; }
     #choices { height: 3; }
     """
@@ -75,10 +77,17 @@ class ConfirmCommand(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="confirmation"):
-            yield Static(Text(f"Confirm local write\n{self.command}\nTarget: {self.target}\nNo email will be sent."))
+            with VerticalScroll(id="confirm-body"):
+                yield Static(
+                    Text(f"Confirm local write\n{self.command}\nTarget: {self.target}\nNo email will be sent.")
+                )
+                yield Static("Tab chooses a button; Enter activates it. Escape cancels.")
             with Horizontal(id="choices"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Confirm", id="confirm", variant="primary")
+
+    def on_mount(self) -> None:
+        self.query_one("#cancel", Button).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "confirm")

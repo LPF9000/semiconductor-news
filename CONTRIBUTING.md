@@ -39,6 +39,7 @@ uv run sundry lab --help
 uv run sundry lab capture --help
 uv run sundry workspace --help
 uv run sundry setup --help
+uv run sundry setup --edit /path/to/topic/config/feeds.toml
 ```
 
 ## Before opening a PR
@@ -68,8 +69,9 @@ and commit the updated `uv.lock` alongside it.
 
 Terminal work uses optional Rich/Textual dependencies, included in the dev extra.
 Keep the plain CLI and JSON usable without them. Test keyboard/mouse navigation,
-resize, cancellation, errors, existing-config protection and unchanged frozen
-files. Also try changes in a real terminal; headless tests cover behavior, not
+resize, cancellation, errors, new-config protection, refinement preservation and
+unchanged frozen files. Refinement must retain advanced settings/comments, show a
+diff, require SAVE, and reject external changes before atomic replacement. Also try changes in a real terminal; headless tests cover behavior, not
 human visual acceptance. See [terminal modes](./docs/terminal.md).
 
 Editorial changes need identical candidate inputs and content-specific reviews.

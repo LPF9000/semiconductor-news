@@ -7,12 +7,14 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
-from textual.widgets import Footer, Input, Select, SelectionList, Static, TextArea
+from textual.widgets import Footer, Input, OptionList, Select, SelectionList, Static, TextArea
 
 from .setup import configuration, save_configuration
+from .setup_categories import CategoryPicker
 from .setup_sources import AnswerEditor, AnswerSubmitted, ContinueRequested, SourcePicker, repository_name
 from .ui_style import SundryApp
 
@@ -45,7 +47,9 @@ class SetupWizard(SundryApp[int]):
     CSS = """
     Screen { background: $background; }
     #form { height: 1fr; padding: 0 2; }
-    #guidance { height: 1fr; min-height: 2; }
+    #guidance { height: auto; max-height: 7; min-height: 2; }
+    Screen.compact #guidance { height: 1; min-height: 1; }
+    Screen.compact #heading, Screen.compact #controls { margin-bottom: 0; }
     #heading { height: auto; color: $primary; text-style: bold; margin-bottom: 1; }
     #hint, #example, #error, #controls { height: auto; margin-bottom: 1; }
     #example { color: $secondary; border-left: solid $secondary; padding-left: 1; }
@@ -55,6 +59,8 @@ class SetupWizard(SundryApp[int]):
     TextArea { height: 5; }
     SourcePicker TextArea { height: 3; border: round $primary; }
     #preview { height: 1fr; min-height: 4; }
+    #advanced { height: 1fr; min-height: 4; }
+    #sections { height: 1fr; min-height: 5; border: round $secondary; }
     """
     BINDINGS = [
         Binding("enter", "answer", "Add / Next"),
@@ -62,6 +68,7 @@ class SetupWizard(SundryApp[int]):
         Binding("ctrl+q", "cancel", "Cancel", priority=True),
         Binding("shift+enter", "newline", "New line", show=False),
         Binding("ctrl+n", "next", "Continue"),
+        Binding("ctrl+g", "menu", "Sections", priority=True),
     ]
     FIELDS = [
         "name",
@@ -100,6 +107,7 @@ class SetupWizard(SundryApp[int]):
                 yield Static(id="hint", markup=False)
                 yield Static(id="example", markup=False)
                 yield Static(id="error", markup=False)
+            yield OptionList(id="sections")
             yield Input(placeholder="Name your digest", id="name")
             yield GuidedSelect(
                 [("Topic configuration only", "config"), ("New topic repository with workflows", "scaffold")],
@@ -110,26 +118,33 @@ class SetupWizard(SundryApp[int]):
             yield Input(value=str(self.scaffold or self.output), id="destination")
             yield SourcePicker("rss")
             yield SourcePicker("arxiv")
-            yield Input(placeholder="Leave blank to skip", id="hn")
-            yield AnswerEditor(id="categories")
+            yield SourcePicker("hn")
+            yield CategoryPicker()
             yield GuidedSelect(
                 [("Neutral ranking", "neutral"), ("Custom term preferences", "custom")],
                 value="neutral",
                 allow_blank=False,
                 id="ranking",
             )
-            yield Input(placeholder="Leave blank for no preference", id="preferred")
-            yield Input(placeholder="Leave blank for no penalty", id="demoted")
+            yield SourcePicker("preferred")
+            yield SourcePicker("demoted")
+            yield TextArea(id="advanced")
             yield AnswerEditor(read_only=True, id="preview")
             yield Input(placeholder="Type CREATE to save, then press Enter", id="confirm")
             yield Static(id="controls", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
+        self.screen.set_class(self.size.height < 24, "compact")
         self._show_step()
 
+    def on_resize(self, event: events.Resize) -> None:
+        self.screen.set_class(event.size.height < 24, "compact")
+
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if action == "next" and self.field not in {"rss", "arxiv"}:
+        if action == "menu":
+            return None
+        if action == "next" and self.field not in {"rss", "arxiv", "hn", "preferred", "demoted", "categories"}:
             return None
         return not (action in {"next", "answer"} and any(select.expanded for select in self.query(Select)))
 
@@ -144,18 +159,31 @@ class SetupWizard(SundryApp[int]):
                 destination.value = str(self.output)
 
     def _collect(self) -> None:
-        for key in ("name", "hn", "preferred", "demoted"):
-            self.values[key] = self.query_one(f"#{key}", Input).value
-        for key in ("rss", "arxiv"):
+        self.values["name"] = self.query_one("#name", Input).value
+        for key in ("rss", "arxiv", "hn", "preferred", "demoted"):
             self.values[key] = self.query_one(f"#{key}", SourcePicker).text
-        self.values["categories"] = self.query_one("#categories", TextArea).text
+        self.values["categories"] = self.query_one("#categories", CategoryPicker).text
         if self.query_one("#ranking", Select).value == "neutral":
             self.values["preferred"] = self.values["demoted"] = ""
+
+    def _related_phrases(self) -> list[str]:
+        return self.query_one("#arxiv", SourcePicker).entered_phrases
 
     def _show_step(self) -> None:
         field = self.field
         scaffold = self.query_one("#destination_mode", Select).value == "scaffold"
         prompts = {
+            "sections": (
+                "Choose a configuration section",
+                "Choose what to refine. Enter opens a section; Ctrl+G returns here.",
+                f"Editing: {self.output}\nReview and Save previews changes before confirmation.",
+            ),
+            "advanced": (
+                "Other settings / full TOML",
+                "Edit advanced settings here. Enter inserts a line; Ctrl+N validates and continues.",
+                "Existing source metadata, section limits and ranking settings are retained.\n"
+                "Ctrl+G validates edits and returns to the section menu.",
+            ),
             "name": (
                 "Name your digest",
                 "What should appear in the email subject and archive heading?",
@@ -187,18 +215,21 @@ class SetupWizard(SundryApp[int]):
             ),
             "hn": (
                 "Add Hacker News searches",
-                "Enter search phrases separated by commas. Leave blank to skip.\n"
+                "Check any phrases from the arXiv page you want to search on Hacker News.\n"
+                "Add more with commas or new lines. Ctrl+N skips or continues.\n"
                 "At least one RSS / Atom feed, arXiv search or Hacker News query is required.",
                 "Example: robotics, motion planning, robot learning",
             ),
             "categories": (
                 "Organize your topic",
-                "Enter one category per line: key | title | comma-separated keywords.\n"
-                "Keys use lowercase letters and underscores. A general catch-all is added automatically.\n"
-                "Optional fourth/fifth fields add required terms and excluded terms.",
-                "robotics | Robotics | robot, robotics, motion planning\n"
-                "learning | Robot Learning | reinforcement learning, imitation learning\n"
-                "Optional: robotics | Robotics | robot, robotics | motion planning | vacuum cleaner",
+                "Sections group articles in your email. One section is enough to start.\n"
+                "Accept or edit the section title, press Enter, then enter comma-separated keywords.\n"
+                "Enter adds the section above; Ctrl+N continues. General catches unmatched articles.",
+                "Example title: Robot Learning\n"
+                "Matching phrases: reinforcement learning, imitation learning\n"
+                "Use specific phrases found in article titles or summaries. Tab moves between fields.\n"
+                "Uncheck sections to omit them. Reuse a title to update its keywords.\n"
+                "Ctrl+E switches to advanced rows: key | title | keywords | required | excluded.",
             ),
             "ranking": (
                 "Choose ranking preferences",
@@ -207,12 +238,16 @@ class SetupWizard(SundryApp[int]):
             ),
             "preferred": (
                 "Which phrases should rank higher?",
-                "Enter preferred phrases separated by commas, or leave blank.",
+                "Add a phrase, then press Enter to see it in the list above.\n"
+                "Commas or new lines add several at once. Uncheck phrases to omit them.\n"
+                "Ctrl+N continues; an empty list means no preference.",
                 "Example: open source, reproducible research",
             ),
             "demoted": (
                 "Which phrases should rank lower?",
-                "Enter demoted phrases separated by commas, or leave blank.",
+                "Add a phrase, then press Enter to see it in the list above.\n"
+                "Commas or new lines add several at once. Uncheck phrases to omit them.\n"
+                "Ctrl+N continues; an empty list means no penalty.",
                 "Example: buy now, sponsored",
             ),
             "preview": (
@@ -233,25 +268,37 @@ class SetupWizard(SundryApp[int]):
         self.query_one("#example", Static).update(Text(example))
         self.query_one("#error", Static).update("")
         self.query_one("#error").display = False
-        for key in self.FIELDS:
+        for key in dict.fromkeys([*SetupWizard.FIELDS, "sections", "advanced"]):
             self.query_one(f"#{key}").display = key == field
-        multiline = field == "categories"
         controls = ""
-        if field in {"rss", "arxiv"}:
-            controls = "Enter add/toggle / Ctrl+N continue\nTab list/input; Shift+Enter new line."
-        elif multiline:
-            controls = "Shift+Enter adds a line; Enter continues."
+        if field in {"rss", "arxiv", "hn", "preferred", "demoted"}:
+            controls = "Enter add/toggle; Ctrl+N continue\nTab fields; F2 edit; Ctrl+D delete."
+        elif field == "categories":
+            controls = "Enter accept/add; Ctrl+N continue\nTab fields; F2 edit; Ctrl+D delete."
         elif field in {"destination_mode", "ranking"}:
             controls = "Up/Down chooses an answer; Enter accepts it."
         self.query_one("#controls", Static).update(controls)
         self.query_one("#controls").display = bool(controls)
         self.query_one("#guidance", VerticalScroll).scroll_home(animate=False)
-        if field in {"rss", "arxiv"}:
+        if field == "hn":
+            self.query_one("#hn", SourcePicker).suggest_phrases(self._related_phrases())
+        if field == "categories":
+            self.query_one("#categories", CategoryPicker).suggest(
+                self.query_one("#name", Input).value,
+                self._related_phrases() + self.query_one("#hn", SourcePicker).text.splitlines(),
+            )
+        if field in {"rss", "arxiv", "hn", "preferred", "demoted"}:
             picker = self.query_one(f"#{field}", SourcePicker)
             choices = picker.query_one(SelectionList)
             if choices.highlighted is None and choices.option_count:
                 choices.highlighted = 0
-            choices.focus()
+            if choices.option_count:
+                choices.focus()
+            else:
+                picker.query_one(TextArea).focus()
+        elif field == "categories":
+            categories = self.query_one("#categories", CategoryPicker)
+            categories.query_one("#category-advanced" if categories.advanced else "#category-title").focus()
         else:
             self.query_one(f"#{field}").focus()
 
@@ -289,7 +336,7 @@ class SetupWizard(SundryApp[int]):
         if self.field in {"hn", "categories"}:
             configuration({**self.values, "categories": self.values["categories"] or "topic | Topic | topic"})
             if self.field == "categories" and not self.values["categories"].strip():
-                raise ValueError("Add at least one topic category using the example above")
+                raise ValueError("Add at least one section with a title and matching phrases")
         if self.field == "demoted" or (
             self.field == "ranking" and self.query_one("#ranking", Select).value == "neutral"
         ):
@@ -306,21 +353,27 @@ class SetupWizard(SundryApp[int]):
     def on_continue_requested(self, event: ContinueRequested) -> None:
         self.action_next()
 
+    def _active_picker(self) -> SourcePicker | CategoryPicker:
+        if self.field == "categories":
+            return self.query_one("#categories", CategoryPicker)
+        return self.query_one(f"#{self.field}", SourcePicker)
+
     def action_answer(self) -> None:
-        if self.field in {"rss", "arxiv"}:
+        if self.field in {"rss", "arxiv", "hn", "preferred", "demoted", "categories"}:
             try:
-                self.query_one(f"#{self.field}", SourcePicker).accept()
+                self._active_picker().accept()
                 self.query_one("#error").display = False
             except ValueError as exc:
                 self.query_one("#error").display = True
                 self.query_one("#error", Static).update(Text(str(exc)))
+                self.query_one("#error").scroll_visible(animate=False)
         else:
             self.action_next()
 
     def action_next(self) -> None:
         try:
-            if self.field in {"rss", "arxiv"}:
-                self.query_one(f"#{self.field}", SourcePicker).add_pending()
+            if self.field in {"rss", "arxiv", "hn", "preferred", "demoted", "categories"}:
+                self._active_picker().add_pending()
             self._validate_answer()
             if self.field == "confirm":
                 if self.query_one("#confirm", Input).value.strip() != "CREATE":
@@ -375,3 +428,6 @@ class SetupWizard(SundryApp[int]):
 
     def action_cancel(self) -> None:
         self.exit(0)
+
+    def action_menu(self) -> None:
+        """New configurations follow the sequential flow; refinement adds a menu."""

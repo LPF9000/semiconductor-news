@@ -50,7 +50,7 @@ COMMANDS = (
         (7,),
     ),
     Command("theme", "[name]", "Cycle colors, or choose sundry-neon, sundry-ember, sundry-forest", "Workspace", (1, 2)),
-    Command("setup", "", "Open guided setup at a new destination", "Workspace", (1,)),
+    Command("setup", "", "Refine the active config, or set up a missing topic", "Workspace", (1,)),
     Command("copy", "", "Copy the last result or selected text", "Workspace", (1,)),
     Command("clear", "", "Clear the transcript", "Workspace", (1,)),
     Command("quit", "", "Close the workspace", "Workspace", (1,)),
@@ -224,21 +224,30 @@ def execute(parts: list[str], store: Path, config: Path) -> str:
 
 
 def launch_interactive() -> int:
-    """Bare terminal launch configures a missing topic, then opens its workspace."""
+    """Bare terminal launch offers new setup, refinement, and research."""
     config = Path("config/feeds.toml")
-    if not config.exists():
+    try:
+        from .setup_launch import LaunchMenu
+        from .setup_refine import RefineWizard
+        from .setup_ui import SetupWizard
+    except ImportError:
+        print("Install the terminal extra: uv sync --extra ui", file=sys.stderr)
+        return 1
+    selection = LaunchMenu(config).run()
+    if selection is None:
+        return 0
+    kind, config = selection
+    if kind != "workspace":
         try:
-            from .setup_ui import SetupWizard
-        except ImportError:
-            print("Install the terminal extra: uv sync --extra ui", file=sys.stderr)
+            wizard = RefineWizard(config) if kind == "refine" else SetupWizard(config)
+            wizard.run()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"Cannot open config: {exc}", file=sys.stderr)
             return 1
-        wizard = SetupWizard(config)
-        wizard.run()
-        if wizard.next_steps:
-            print(wizard.next_steps)
-            config = wizard.output if not wizard.scaffold else wizard.scaffold / "config/feeds.toml"
-        else:
+        if not wizard.next_steps:
             return 0
+        print(wizard.next_steps)
+        config = wizard.output if not wizard.scaffold else wizard.scaffold / "config/feeds.toml"
     return run_workspace(["--config", str(config)])
 
 
@@ -257,10 +266,18 @@ def run_workspace(argv: list[str]) -> int:
         print("Install the workspace with uv sync --extra ui", file=sys.stderr)
         return 1
     while Workspace(args.store_dir, args.config, color_enabled=not args.no_color).run() == "setup":
+        from .setup_refine import RefineWizard
         from .setup_ui import SetupWizard
 
-        output = args.config if not args.config.exists() else args.config.with_name("feeds-new.toml")
-        wizard = SetupWizard(output, color_enabled=not args.no_color)
+        try:
+            wizard = (
+                RefineWizard(args.config, color_enabled=not args.no_color)
+                if args.config.exists()
+                else SetupWizard(args.config, color_enabled=not args.no_color)
+            )
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"Cannot open config: {exc}", file=sys.stderr)
+            return 1
         wizard.run()
         if wizard.next_steps:
             args.config = wizard.output if not wizard.scaffold else wizard.scaffold / "config/feeds.toml"

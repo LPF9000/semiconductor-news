@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
@@ -31,6 +32,13 @@ class EditionScreen(Screen[None]):
     DataTable { height: 1fr; min-height: 5; }
     #details { height: 10; border-top: solid $primary; padding: 0 1; }
     #status { height: auto; max-height: 5; padding: 0 1; }
+    EditionScreen.narrow #filters { layout: grid; grid-size: 2; grid-columns: 1fr 1fr;
+                                   grid-rows: 3 3; height: 6; }
+    EditionScreen.narrow #filters Select { width: 1fr; }
+    EditionScreen.narrow #filters Input { column-span: 2; width: 1fr; }
+    EditionScreen.compact DataTable { min-height: 3; }
+    EditionScreen.compact #details { height: 4; }
+    EditionScreen.compact #status { max-height: 2; }
     """
     BINDINGS = [("q", "close", "Close"), ("o", "open_article", "Open article"), ("slash", "search", "Search")]
 
@@ -72,6 +80,10 @@ class EditionScreen(Screen[None]):
         self.ready = True
         self._refresh_rows()
         self.query_one(DataTable).focus()
+
+    def on_resize(self, event: events.Resize) -> None:
+        self.set_class(event.size.width < 65, "narrow")
+        self.set_class(event.size.height < 24, "compact")
 
     def _refresh_rows(self) -> None:
         query = self.query_one(Input).value.casefold().strip()
