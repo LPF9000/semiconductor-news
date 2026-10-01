@@ -24,6 +24,7 @@ has no default topic.
 - [Using this for your own topic](#using-this-for-your-own-topic)
 - [How it works](#how-it-works)
 - [Search, article links, and date testing](#search-article-links-and-date-testing)
+- [Interactive terminal](#interactive-terminal)
 - [Tuning the digest](#tuning-the-digest)
 - [Setting up email (required, one-time)](#setting-up-email-required-one-time)
 - [Known limitations](#known-limitations)
@@ -50,6 +51,26 @@ uvx --from "git+https://github.com/LPF9000/sundry.git@main" sundry init
 This writes `config/feeds.toml`, scheduled and CI workflows, and agent
 instructions. It installs Sundry in uv's cache; it does not copy the engine
 into your repository.
+
+For an interactive setup wizard in an empty topic repository, use:
+
+```bash
+uvx --from "sundry[ui] @ git+https://github.com/LPF9000/sundry.git@main" sundry setup --scaffold .
+```
+
+The wizard asks one question at a time, with examples: Enter continues, Ctrl+P
+goes back, and Shift+Enter adds a line. On source screens, Enter adds/checks an
+item and Ctrl+N continues. Feeds have selectable suggestions and custom URL
+entry; arXiv accepts plain search phrases. Hacker News offers those phrases as
+independent selectable choices and accepts comma- or newline-separated additions.
+Topic sections use a title and matching phrases, with automatic internal keys;
+Enter adds a section and Ctrl+N continues. An advanced row editor is also available.
+Preferred and demoted ranking phrases use the same checked lists: Enter adds individual or
+comma/newline-separated phrases, and Ctrl+N continues.
+It collects
+sources, categories and ranking preferences, validates a
+TOML preview, and asks you to confirm before creating files. Existing files are
+protected. See [terminal setup](./docs/terminal.md#guided-setup).
 
 ### Filling in config/feeds.toml without an AI agent
 
@@ -103,8 +124,8 @@ that edition offline. `show` preserves the original, while `rerank` experiments
 with the current config. This prevents a ranking change or a changing feed
 from silently changing yesterday's edition.
 
-From your topic repository, using its installed `sundry` command (or the sibling
-checkout's `../sundry/.venv/bin/sundry`):
+From your topic repository, using its installed `sundry` command. To use a sibling
+development checkout instead, prefix commands with `uv run --project ../sundry`:
 
 ```bash
 sundry lab capture --date 2026-09-29 --category dv_uvm
@@ -151,6 +172,13 @@ include corpus, ratings, config and engine hashes; compare trends only when the
 cohort and rating ledger match. Reserve future unseen articles as holdout data
 before making claims about generalization.
 
+`lab audit` exports source mix, publisher concentration, freshness, repetition,
+access evidence and missing content-specific reviews. `lab holdout` rejects
+canonical-story overlap with a tuning corpus. Both validate frozen inputs and
+protect them from report writes. See [the audit protocol](./docs/editorial-audit.md)
+for shared ledgers, explicit access metadata, a month of captures, and independent
+review. Access checks and title-similarity diagnostics do not alter rankings.
+
 `max_items_per_section` defaults to 10 in config, with optional category
 `max_items` overrides. The normal CLI's `--max-items-per-section N` overrides all
 sections for a run, provided N still meets the configured minimums. Collection
@@ -161,12 +189,12 @@ From a Sundry checkout with its own environment installed:
 
 ```bash
 # Fetch once, print article links, and retain candidates for fast comparisons.
-.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+uv run sundry --config examples/feeds.toml --date 2026-09-24 \
   --links --links-output /tmp/links.txt --candidates-output /tmp/candidates.json \
   --report-output /tmp/report.json --html-output /tmp/preview.html
 
 # Change weights in the config, then repeat offline using identical candidates.
-.venv/bin/sundry --config examples/feeds.toml --date 2026-09-24 \
+uv run sundry --config examples/feeds.toml --date 2026-09-24 \
   --candidates-input /tmp/candidates.json --links \
   --report-output /tmp/report.json --html-output /tmp/preview.html
 ```
@@ -238,6 +266,49 @@ cron expression, always in UTC: `"0 8 * * *"` for once daily at 08:00
 UTC, `"0 */6 * * *"` for every 6 hours, `"0 12 * * 1-5"` for weekdays
 only, and so on. The ~45-day dedupe window works the same regardless of
 how often you run it.
+
+## Interactive terminal
+
+In this checkout, start the Textual interface directly:
+
+```bash
+uv run sundry
+```
+
+The initial menu offers New, Refine existing config, or Research workspace.
+New opens guided setup. Choose a config file or a new
+empty topic repository with scheduled workflows, review the preview, and confirm
+the files by typing `CREATE`. Setup asks one question at a time with examples;
+Enter accepts answers, Ctrl+P goes back, and Ctrl+N advances source lists.
+Repository names follow the title; source pickers accept suggested or custom
+feeds, and arXiv accepts plain research phrases. Hacker News reuses those phrases
+as optional choices and accepts additional searches. Topic organization guides
+you through section titles and matching phrases; Enter adds, Ctrl+N continues.
+Setup then opens the research workspace. Existing files are protected during
+creation. Refinement loads current entries, provides a section menu and a
+diff before a confirmed SAVE. F2 edits and Ctrl+D deletes list entries; Ctrl+G
+returns to sections. Advanced settings and comments are retained. To reopen a
+config directly, run `uv run sundry setup --edit config/feeds.toml`.
+Local `uv run` installs the terminal dependencies automatically; installed engine
+packages still offer them through the optional `ui` extra.
+
+To explore the example configuration or choose a capture store:
+
+```bash
+uv run sundry workspace --config examples/feeds.toml --store-dir evaluation
+uv run sundry setup --output config/my-topic-feeds.toml
+```
+
+Type `/` for selectable command suggestions, or `/help` for a colored command
+table. The workspace includes history, selectable output, copy, three custom
+palettes, frozen article browsing and evaluation commands. Commands such as
+`/show`, `/audit` and `/rerank` resolve useful date/section defaults. Capture,
+rating and saved benchmark writes require confirmation. Neither interactive
+mode sends mail or updates production archives/cache.
+
+Use `uv run sundry build` for an explicit batch build. Arguments such as
+`--config` and nonterminal invocations retain the existing batch behavior.
+See [terminal controls and examples](./docs/terminal.md).
 
 ## Setting up email (required, one-time)
 
@@ -326,8 +397,18 @@ uv run pytest --cov=sundry --cov-fail-under=80
 uv run sundry --help
 ```
 
-Use this repository's environment. Once installed, the same commands are
-available under `.venv/bin/`. Update and commit `uv.lock` when dependencies change.
+Use `uv run` for local commands; it handles the project environment without
+requiring `source .venv/bin/activate`. To explore the CLI and its subcommands:
+
+```bash
+uv run sundry --help
+uv run sundry lab --help
+uv run sundry lab capture --help
+```
+
+Manual activation and `.venv/bin/` commands also work, but `uv run` is the
+preferred approach in this checkout. Update and commit `uv.lock` when
+dependencies change.
 
 ## Repository layout
 

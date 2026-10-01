@@ -5,6 +5,39 @@ Notable changes to this project. Format loosely follows
 
 ## [Unreleased]
 
+- Add New/Refine/Workspace startup choices, section navigation and list edit/delete
+  controls. Refine existing TOML with preserved comments/settings, diff review,
+  typed SAVE confirmation and atomic replacement with external-change protection.
+- Keep browser filters/details and confirmation controls usable in short terminals;
+  document the full interactive usability audit.
+
+- Show preferred and demoted ranking phrases in checked setup lists; Enter adds individual
+  or comma/newline-separated phrases and Ctrl+N continues.
+
+- Enlarge setup source lists, reuse arXiv phrases as independent Hacker News
+  choices with batch entry, and guide topic sections through titles and matching
+  phrases with automatic keys and optional advanced rows.
+
+- Suggest repository names from the topic title; add checked source pickers with
+  custom/batch feed entry and plain-language arXiv search construction.
+
+- Guide interactive setup one answer at a time with Enter/Back controls, source
+  and category examples, visible editors in short terminals and typed confirmation.
+
+- Launch guided setup and the workspace with bare `uv run sundry` in a terminal;
+  retain explicit batch builds and nonterminal behavior.
+- Add slash completion, colored command/result tables, selectable transcript,
+  clipboard controls, custom palettes and responsive prompt borders.
+- Resolve date/section defaults, clear failed submissions, isolate command errors,
+  and offer config or repository destinations in guided setup.
+
+- Add an optional Textual research workspace with a command transcript, saved
+  edition details, experimental reranks, and confirmed local capture/rating writes.
+- Add a separate guided Textual setup mode with source/category forms, ranking
+  preferences, validated TOML previews and existing-file protection.
+- Add frozen-edition audits, shared review queues, explicit access evidence,
+  similar-title diagnostics and holdout story-overlap checks.
+
 - Add immutable daily CLI editions, editorial ratings, comparable multi-day
   benchmarks and experiment history with quality/count gates and supply alerts.
 - Normalize article identity, rotate previously sent reading, expose configurable

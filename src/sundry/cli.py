@@ -37,11 +37,20 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 EPILOG = """\
 examples:
+  # Start guided setup or the research workspace in a terminal
+  sundry
+
+  # Open a workspace with explicit configuration and capture store
+  sundry workspace
+
+  # Configure a topic interactively in your own repository
+  sundry setup --scaffold .
+
   # Scaffold config/feeds.toml + a caller workflow in a new topic repo
   sundry init
 
   # Build today's digest using config/feeds.toml, exactly as a daily workflow does
-  sundry
+  sundry build
 
   # Preview a build without touching committed state (safe to run anytime)
   sundry --html-output /tmp/preview.html --no-write-cache --no-archive
@@ -78,6 +87,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--candidates-output", type=Path, help="Save fetched candidates for rapid offline comparisons")
     parser.add_argument("--report-output", type=Path, help="Write candidate scores and selection decisions as JSON")
     parser.add_argument("--links", action="store_true", help="Print selected article titles and links to stdout")
+    parser.add_argument("--plain", action="store_true", help="Disable terminal decoration (pipes are always plain)")
     parser.add_argument("--links-output", type=Path, help="Save selected article titles and links as plain text")
     parser.add_argument("--max-items-per-section", type=int, help="Override every section's article limit for this run")
     parser.add_argument(
@@ -255,6 +265,21 @@ def _digest_subject(digest_name: str, run_date: str, total_shown: int, *, replay
 
 def main(argv: list[str] | None = None) -> int:
     raw_argv = sys.argv[1:] if argv is None else argv
+    if not raw_argv and sys.stdin.isatty() and sys.stdout.isatty():
+        from .workspace import launch_interactive
+
+        return launch_interactive()
+    if raw_argv[:1] == ["build"]:
+        raw_argv = raw_argv[1:]
+        argv = raw_argv
+    if raw_argv[:1] == ["setup"]:
+        from .setup import run_setup
+
+        return run_setup(raw_argv[1:])
+    if raw_argv[:1] == ["workspace"]:
+        from .workspace import run_workspace
+
+        return run_workspace(raw_argv[1:])
     if raw_argv[:1] == ["lab"]:
         from .lab import run_lab
 
@@ -370,7 +395,19 @@ def main(argv: list[str] | None = None) -> int:
         for article in items
     )
     if args.links:
-        print(links)
+        from .lab import _rows
+        from .terminal import print_edition
+
+        print_edition(
+            {
+                "date": run_date,
+                "origin": "dated preview" if args.date else "live search",
+                "sections": {config.category_by_key()[key].title: _rows(items) for key, items in categorized.items()},
+                "warnings": failures,
+            },
+            links,
+            plain=args.plain,
+        )
     if args.links_output:
         args.links_output.parent.mkdir(parents=True, exist_ok=True)
         args.links_output.write_text(links, encoding="utf-8")

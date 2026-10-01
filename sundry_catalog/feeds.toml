@@ -1,0 +1,20 @@
+# Optional setup suggestions. Nothing is selected or fetched automatically.
+[[rss_sources]]
+name = "NASA News Releases"
+url = "https://www.nasa.gov/news-release/feed/"
+
+[[rss_sources]]
+name = "Python Insider"
+url = "https://blog.python.org/feeds/posts/default"
+
+[[rss_sources]]
+name = "Hacker News"
+url = "https://news.ycombinator.com/rss"
+
+[[rss_sources]]
+name = "Antmicro Engineering"
+url = "https://antmicro.com/blog/feed.xml"
+
+[[rss_sources]]
+name = "ZipCPU"
+url = "https://zipcpu.com/feed.xml"

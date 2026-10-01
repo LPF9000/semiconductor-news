@@ -77,6 +77,21 @@ a separate integration check.
 
 ## Follow-up after initial deployment
 
+The optional terminal interface now provides a Textual command workspace and a
+separate guided setup wizard. The frozen-edition detail view is accessible from
+the workspace rather than being the primary interface. See docs/terminal.md for
+commands, write confirmations, cancellation, keyboard/mouse controls and plain
+CLI alternatives.
+
+`lab audit` now reports frozen source mix, publisher concentration, fresh and
+repeated selections, missing content-specific reviews, explicit access evidence,
+and title-similarity diagnostics. Shared rating ledgers are supported.
+`lab holdout` rejects canonical-story overlap with a tuning store and fingerprints
+both corpora. See docs/editorial-audit.md for the prospective review protocol.
+These tools do not turn a retrospective search into an original edition or replace
+independent human reviews. Automatic clustering, publisher quotas and access-aware
+ranking still need measured non-regression evidence before deployment.
+
 Audit a month of snapshots against human labels and tune weights from measured
 errors. Add more independent public DV sources in configuration if the pool is
 too narrow. If research overwhelms useful tutorials, impose source diversity

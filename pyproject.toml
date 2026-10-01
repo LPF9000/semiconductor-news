@@ -21,7 +21,11 @@ Repository = "https://github.com/LPF9000/sundry"
 Issues = "https://github.com/LPF9000/sundry/issues"
 
 [project.optional-dependencies]
+ui = ["rich>=14,<15", "textual>=6,<9", "tomlkit>=0.13,<1"]
 dev = [
+  "rich>=14,<15",
+  "textual>=6,<9",
+  "tomlkit>=0.13,<1",
   "pytest>=9.1.1",
   "pytest-cov>=5.0",
   "ruff>=0.16.5",
@@ -32,8 +36,18 @@ dev = [
 [project.scripts]
 sundry = "sundry.cli:main"
 
+[dependency-groups]
+terminal = ["rich>=14,<15", "textual>=6,<9", "tomlkit>=0.13,<1"]
+
+[tool.uv]
+default-groups = ["terminal"]
+
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["sundry", "sundry.*", "sundry_catalog"]
+
+[tool.setuptools.package-data]
+sundry_catalog = ["feeds.toml"]
 
 [tool.ruff]
 line-length = 120

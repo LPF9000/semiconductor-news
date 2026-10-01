@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import math
+import sys
 import tempfile
 from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
@@ -97,6 +98,14 @@ def capture(config_path: Path, store: Path, day: date, candidates_input: Path | 
 
 def _validated_edition(folder: Path) -> dict[str, Any]:
     edition: dict[str, Any] = _read_json(folder / "edition.json")
+    if not isinstance(edition, dict) or not isinstance(edition.get("sections"), dict):
+        raise ValueError(f"Malformed edition: {folder}")
+    if any(not isinstance(key, str) or not isinstance(rows, list) for key, rows in edition["sections"].items()):
+        raise ValueError(f"Malformed edition sections: {folder}")
+    if not isinstance(edition.get("warnings", []), list) or any(
+        not isinstance(warning, str) for warning in edition.get("warnings", [])
+    ):
+        raise ValueError(f"Malformed edition warnings: {folder}")
     for filename, key in (("candidates.json", "candidates_sha256"), ("config.toml", "config_sha256")):
         if hashlib.sha256((folder / filename).read_bytes()).hexdigest() != edition[key]:
             raise ValueError(f"Edition integrity check failed: {folder / filename}")
@@ -407,9 +416,14 @@ def run_lab(argv: list[str]) -> int:
     cap.add_argument("--date", type=date.fromisoformat, default=datetime.now(UTC).date())
     cap.add_argument("--candidates-input", type=Path)
     cap.add_argument("--category")
+    cap.add_argument("--plain", action="store_true")
     display = sub.add_parser("show", help="Show original frozen links without reranking or network calls")
     display.add_argument("--date", type=date.fromisoformat, required=True)
     display.add_argument("--category")
+    display.add_argument("--plain", action="store_true")
+    browse = sub.add_parser("browse", help="Browse frozen editions interactively; no fetches, email, or writes")
+    browse.add_argument("--date", type=date.fromisoformat, help="Start on this date (default: latest capture)")
+    browse.add_argument("--category", help="Start with this section selected")
     review = sub.add_parser("rate", help="Append an editorial review: 0 unrelated, 1 marginal, 2 useful, 3 excellent")
     review.add_argument("--date", type=date.fromisoformat)
     locator = review.add_mutually_exclusive_group(required=True)
@@ -435,15 +449,62 @@ def run_lab(argv: list[str]) -> int:
     rerank.add_argument("--config", type=Path, default=Path("config/feeds.toml"))
     rerank.add_argument("--date", type=date.fromisoformat, required=True)
     rerank.add_argument("--category", required=True)
+    rerank.add_argument("--plain", action="store_true")
     trend = sub.add_parser("history", help="Show recorded experiments; compare only matching corpus and rating hashes")
     trend.add_argument("--category", required=True)
+    audit_parser = sub.add_parser("audit", help="Monitor frozen editions and export a content-specific review queue")
+    audit_parser.add_argument("--category", required=True)
+    audit_parser.add_argument("--dates", type=date.fromisoformat, nargs="+")
+    audit_parser.add_argument("--ratings", type=Path, help="Shared content-specific editorial ledger")
+    audit_parser.add_argument("--access-metadata", type=Path, help="Explicit content-specific access evidence")
+    audit_parser.add_argument("--output", type=Path, required=True)
+    holdout = sub.add_parser("holdout", help="Check canonical-story separation from a tuning corpus")
+    holdout.add_argument("--training-store", type=Path, required=True)
+    holdout.add_argument("--dates", type=date.fromisoformat, nargs="+", required=True)
+    holdout.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         if args.command == "capture":
-            print(show(capture(args.config, args.store_dir, args.date, args.candidates_input), args.category))
+            _display_edition(capture(args.config, args.store_dir, args.date, args.candidates_input), args)
+        elif args.command in {"audit", "holdout"}:
+            from .audit import audit, holdout_manifest
+
+            report = (
+                audit(
+                    args.store_dir,
+                    args.category,
+                    args.dates,
+                    ratings_path=args.ratings,
+                    access_path=args.access_metadata,
+                )
+                if args.command == "audit"
+                else holdout_manifest(args.store_dir, args.training_store, args.dates)
+            )
+            protected = args.store_dir.resolve()
+            output = args.output.resolve()
+            inputs = [protected / "ratings.json"]
+            if args.command == "audit":
+                inputs.extend(path.resolve() for path in (args.ratings, args.access_metadata) if path)
+            folders = list(args.store_dir.glob("????-??-??/edition.json"))
+            if args.command == "holdout":
+                folders.extend(args.training_store.glob("????-??-??/edition.json"))
+                inputs.append(args.training_store.resolve() / "ratings.json")
+            if output in inputs or any(output.is_relative_to(p.parent.resolve()) for p in folders):
+                raise ValueError("Audit outputs must not replace a ledger or frozen edition")
+            _write_json(args.output, report)
+            print(json.dumps(report, indent=2))
+            return 0 if report.get("review_complete", report.get("independent", False)) else 1
         elif args.command == "show":
-            print(show(_validated_edition(args.store_dir / args.date.isoformat()), args.category))
+            _display_edition(_validated_edition(args.store_dir / args.date.isoformat()), args)
+        elif args.command == "browse":
+            if not sys.stdin.isatty() or not sys.stdout.isatty():
+                raise ValueError("browse needs an interactive terminal; use lab show for pipes or CI")
+            try:
+                from .browser import EditionBrowser
+            except ImportError as exc:
+                raise ValueError("Install the browser with: uv sync --extra ui (or pip install 'sundry[ui]')") from exc
+            EditionBrowser(args.store_dir, args.date, args.category).run()
         elif args.command == "rate":
             if args.id:
                 add_rating(args.store_dir, args.id, args.category, args.grade, args.kind, args.notes, args.reviewer)
@@ -471,15 +532,13 @@ def run_lab(argv: list[str]) -> int:
                     )
         elif args.command == "rerank":
             result = benchmark(args.store_dir, args.config, args.category, [args.date])
-            print(
-                show(
-                    {
-                        "date": args.date.isoformat(),
-                        "origin": "experimental rerank",
-                        "sections": {args.category: result["days"][0]["selection"]},
-                    },
-                    args.category,
-                )
+            _display_edition(
+                {
+                    "date": args.date.isoformat(),
+                    "origin": "experimental rerank",
+                    "sections": {args.category: result["days"][0]["selection"]},
+                },
+                args,
             )
         else:
             days = args.dates or [
@@ -505,3 +564,13 @@ def run_lab(argv: list[str]) -> int:
         logger.error("%s", exc)
         return 1
     return 0
+
+
+def _display_edition(edition: dict[str, Any], args: argparse.Namespace) -> None:
+    from .terminal import print_edition
+
+    plain_text = show(edition, args.category)
+    filtered = dict(edition)
+    if args.category:
+        filtered["sections"] = {args.category: edition["sections"][args.category]}
+    print_edition(filtered, plain_text, plain=args.plain)

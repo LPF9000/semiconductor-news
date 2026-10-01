@@ -218,8 +218,48 @@ research/sales source weights, CLI links, and offline candidate replay.
 
 ## Dev commands (this repo's own Python package)
 
+The optional Textual interface has two separate modes: `sundry workspace` for
+interactive research/evaluation commands, and `sundry setup` for local guided
+configuration. Setup must run in a topic repository or at an explicit new output
+path, with preview and confirmation before writes. Protect existing configs and
+retain the noninteractive `init`, plain CLI and JSON paths. Refinement uses
+`setup --edit PATH`, a section menu and diff/typed SAVE confirmation before atomic
+replacement. Preserve comments, advanced/unexposed settings and file permissions;
+refuse saves if the original changed. F2 edits and Ctrl+D permanently deletes a
+highlighted list entry; Ctrl+G returns to the refinement menu. Optional setup feed
+choices live in `sundry_catalog/feeds.toml`, outside `src/`, and are never
+preselected. Plain arXiv phrases build deterministic queries; advanced queries
+remain available. Hacker News offers entered arXiv phrases as unchecked,
+independent choices and accepts comma/newline additions. Enter adds/toggles source
+entries; Ctrl+N advances source lists. Topic organization uses guided section
+titles and keywords with automatic keys; Ctrl+E exposes advanced rows. Enter adds
+sections and Ctrl+N continues. Lists show multiple rows while editors and footer
+remain visible in short terminals. Preferred and demoted ranking phrases also
+use checked lists with Enter to add individual/comma/newline phrases and Ctrl+N to continue.
+UI dependencies remain optional for installed packages; the checkout defaults
+to the terminal dependency group. Bare `uv run sundry` in a terminal offers New, Refine existing config and
+Research workspace. Saving setup/refinement then opens the workspace. Use `sundry build` for an explicit
+batch run; invocations with build flags and pipes retain batch behavior. See docs/terminal.md, docs/terminal-usability.md and docs/editorial-audit.md.
+
+`lab audit` reports original frozen selections and missing reviews; `lab holdout`
+checks canonical-story separation from a tuning store. These checks do not supply
+human labels, guarantee scientific correctness, or infer access from publishers.
+Do not call an unreviewed or overlapping corpus an independent quality success.
+
+Prefer `uv run` for all local CLI and development commands in this checkout.
+It handles the project environment automatically; do not instruct users to
+activate `.venv` or default to `.venv/bin/sundry`. For a new topic repo,
+continue to use the `uvx` setup workflow above.
+
 ```bash
-uv sync --extra dev              # install
+uv sync --locked --extra dev     # install
+uv run sundry                    # interactive setup/workspace
+uv run sundry build --help       # batch CLI help
+uv run sundry lab --help         # evaluation command help
+uv run sundry lab capture --help # subcommand help
+uv run sundry workspace --help   # interactive command workspace
+uv run sundry setup --help       # guided local configuration
+uv run sundry setup --edit config/feeds.toml # refine with review and confirmed save
 uv run ruff check .              # lint
 uv run ruff format .             # format
 uv run mypy src                  # type-check
